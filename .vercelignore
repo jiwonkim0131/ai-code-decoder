@@ -1,0 +1,9 @@
+# 함수 번들에 필요 없는 파일. 번들 크기(Python 500MB)를 작게 유지한다.
+.env
+.env.*
+.githooks/
+.venv/
+tests/
+evals/
+scripts/
+node_modules/
