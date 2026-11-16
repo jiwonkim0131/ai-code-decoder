@@ -36,5 +36,5 @@ def test_agent_ping_reports_duration_and_tokens(make_client, monkeypatch: pytest
     assert body["ok"] is True
     assert body["model"] == "m"
     assert body["output"] == "pong"
-    assert body["total_tokens"] == 12
-    assert body["duration_ms"] >= 0
+    assert body["totalTokens"] == 12
+    assert body["durationMs"] >= 0
