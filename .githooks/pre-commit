@@ -1,0 +1,20 @@
+#!/bin/sh
+# 비밀값 커밋 차단: .env 파일과 OpenAI 키처럼 보이는 문자열이 스테이징되면 커밋을 막는다.
+# 설치: git config core.hooksPath .githooks
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+for f in $staged; do
+  case "$(basename "$f")" in
+    .env.example) ;;
+    .env|.env.*)
+      echo "pre-commit: '$f' 는 비밀값 파일이라 커밋할 수 없습니다." >&2
+      exit 1
+      ;;
+  esac
+done
+
+if git diff --cached -U0 --diff-filter=ACMR | grep -E '^\+' | grep -qE 'sk-(proj-)?[A-Za-z0-9_-]{20,}'; then
+  echo "pre-commit: OpenAI API 키로 보이는 값이 스테이징되어 있습니다. 제거한 뒤 다시 커밋하세요." >&2
+  exit 1
+fi
