@@ -146,16 +146,32 @@ def _lookup_names(ctx: AnalystContext) -> dict[str, list]:
     return names
 
 
+def _matching_docs(symbol: str, step: DraftStep, names: dict[str, list]) -> list:
+    """근거 심볼 표기(asyncio.gather, gather, asyncio.gather(...))를 조회 결과에 잇는다.
+
+    괄호 뒤 인자는 떼고, 그래도 없으면 단계의 심볼로 찾는다.
+    """
+    for candidate in (symbol, symbol.split("(", 1)[0].strip(), step.symbol):
+        if candidate in names:
+            return names[candidate]
+    return []
+
+
+def _canonical(doc) -> str:
+    return doc.symbol if doc.module in {"builtins", "__builtin__"} else f"{doc.module}.{doc.symbol}"
+
+
 def _apply_badge_policy(
     evidence: DraftEvidence, step: DraftStep, ctx: AnalystContext, names: dict[str, list]
 ) -> Evidence:
     symbol = evidence.symbol or step.symbol
-    docs = names.get(symbol, [])
-    exact = next((doc for doc in docs if doc.status == "exact_match"), None)
     note = evidence.note.strip() or None
     if evidence.badge == "official":
+        docs = _matching_docs(symbol, step, names)
+        exact = next((doc for doc in docs if doc.status == "exact_match"), None)
         if exact is not None and ctx.adapter.capabilities.official_docs:
-            return Evidence(badge="official", symbol=symbol, url=exact.url, note=note)
+            # 화면에는 모델의 표기 대신 조회한 정식 이름(asyncio.gather)을 쓴다.
+            return Evidence(badge="official", symbol=_canonical(exact), url=exact.url, note=note)
         if any(doc.status == "unavailable" for doc in docs):
             return Evidence(badge="needs_check", symbol=symbol, note=UNAVAILABLE_NOTE)
         return Evidence(badge="inferred", symbol=symbol, note=note or DOWNGRADED_NOTE)

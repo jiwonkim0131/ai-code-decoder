@@ -33,7 +33,9 @@ ANALYST_PROMPT = f"""\
    - needs_check: 코드만으로 알 수 없는 내용(정의가 보이지 않는 함수의 동작 등). note에 무엇을 확인해야 하는지 쓴다.
 3. 결정 지점(decision_points): 다른 방식도 충분히 가능했는데 이 코드가 하나를 고른 설계 결정만 고른다(0~3개).
    흔한 예: asyncio.gather vs TaskGroup vs 순차 실행, 예외를 모을지 바로 던질지, 재시도·타임아웃 유무.
-   결정할 만한 것이 없으면 빈 목록으로 둔다.
+   결정 지점은 <question>이 있든 없든 코드 전체에서 찾는다. 질문이 없다고 결정 지점을 빼지 않는다.
+   동시성, 예외 처리, 재시도·대기, 타임아웃, 자료구조처럼 실무에서 다른 방식도 흔히 쓰는 지점이 있으면 최소 1개를 만든다.
+   단순 대입·출력처럼 정말로 다른 선택지가 없을 때만 빈 목록으로 둔다.
    - prompt는 "너라면 ~ 어떻게 하겠어요?" 형태로, 정답을 암시하지 않는다.
    - options는 A~D 정확히 4개이고 그중 하나가 이 코드의 선택(code_option)이다. 나머지는 실무에서 실제로 쓰는 대안이다.
    - conditions는 이 결정을 가른 조건 2~4개다(예: "실패한 tool이 있어도 나머지 결과를 써야 하는가").
@@ -70,7 +72,7 @@ def analyst_input(
     return (
         f"<code>\n{numbered_code(code)}\n</code>\n"
         f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
-        f"<question>\n{question.strip() or '없음(코드 전체 흐름을 설명한다)'}\n</question>\n"
+        f"<question>\n{question.strip() or '없음(코드 전체 흐름을 설명하고 결정 지점도 찾는다)'}\n</question>\n"
         f"<focus_lines>{focus}</focus_lines>\n"
         f"<level>{LEVEL_LABELS.get(level, level)}</level>"
     )

@@ -65,6 +65,14 @@ export default function App() {
   const dp: DecisionPoint | undefined = dps[dpIndex];
   const verdict = dp ? verdicts[dp.id] : undefined;
 
+  // 단계 버튼은 보여 줄 내용이 있을 때만 연다(결정 지점이 없거나 판정 전이면 3·4단계는 닫힘).
+  const available = (i: number) =>
+    i === 0 ||
+    (i === 1 && analysis !== null) ||
+    (i === 2 && dp !== undefined && reached >= 2) ||
+    (i === 3 && verdict !== undefined) ||
+    (i === 4 && analysis !== null && reached >= 4);
+
   const go = (next: Stage) => {
     setStage(next);
     setReached((r) => (next > r ? next : r));
@@ -213,12 +221,12 @@ export default function App() {
 
       <nav className="stepnav" aria-label="학습 단계">
         {STAGES.map((name, i) => {
-          const state = i === stage ? "current" : i <= reached ? "done" : "todo";
+          const state = i === stage ? "current" : available(i) ? "done" : "todo";
           return (
             <button
               key={name}
               className={`stepnav-item ${state}`}
-              disabled={i > reached || loading !== null}
+              disabled={!available(i) || loading !== null}
               aria-current={i === stage ? "step" : undefined}
               onClick={() => go(i as Stage)}
             >
@@ -397,6 +405,24 @@ export default function App() {
               </details>
             </section>
           </div>
+        )}
+
+        {(stage === 2 || stage === 3) && !(stage === 2 ? dp : dp && verdict) && (
+          <section className="panel wide">
+            <p className="banner info">
+              {dps.length === 0
+                ? "이 코드에서는 결정 지점을 찾지 못했어요. 흐름 설명을 보거나 제약을 바꿔 보세요."
+                : "아직 답한 결정 지점이 없어요. 흐름 설명에서 '너라면?'을 눌러 시작하세요."}
+            </p>
+            <div className="actions">
+              <button onClick={() => go(1)}>흐름 설명으로</button>
+              {dps.length === 0 && (
+                <button className="primary" onClick={() => go(4)}>
+                  제약 바꿔 보기
+                </button>
+              )}
+            </div>
+          </section>
         )}
 
         {stage === 2 && dp && (

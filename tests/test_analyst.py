@@ -198,3 +198,20 @@ def test_symbol_error_suggests_names_on_those_lines(client, scripted_model, docs
     _analyze(client)
 
     assert "(이 줄의 후보: call_tool" in input_text(scripted_model.last_call)
+
+
+@pytest.mark.parametrize("written", ["gather", "asyncio.gather(*tasks)", None])
+def test_official_symbol_variants_are_matched_and_canonicalized(
+    client, scripted_model, gather_doc, written
+):
+    draft = analysis_draft()
+    draft["steps"][1]["evidence"] = [{"badge": "official", "symbol": written, "note": ""}]
+    scripted_model.extend([lookup("asyncio", "gather"), final(draft)])
+
+    evidence = _analyze(client).json()["steps"][1]["evidence"][0]
+
+    assert (evidence["badge"], evidence["symbol"], evidence["url"]) == (
+        "official",
+        "asyncio.gather",
+        GATHER_URL,
+    )
