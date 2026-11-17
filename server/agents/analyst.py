@@ -14,7 +14,6 @@ from agents import (
     ModelBehaviorError,
     ModelSettings,
     RunContextWrapper,
-    Runner,
     UserError,
     function_tool,
 )
@@ -22,6 +21,7 @@ from agents import (
 from server.agents import runtime
 from server.agents.context import AnalystContext, ToolContractError
 from server.agents.prompts import ANALYST_PROMPT, analyst_input
+from server.agents.runtime import RunStats
 from server.agents.schemas import AnalysisDraft
 from server.config import get_settings
 from server.errors import ApiError, ErrorCode
@@ -66,36 +66,24 @@ def build_analyst(checked: CheckedCode, level: str) -> Agent[AnalystContext]:
     )
 
 
-def _add_usage(ctx: AnalystContext, result) -> None:
-    usage = getattr(getattr(result, "context_wrapper", None), "usage", None)
-    ctx.tokens += getattr(usage, "total_tokens", 0) or 0
-
-
-async def run_analyst(req: AnalyzeRequest, checked: CheckedCode) -> AnalyzeResponse:
+async def run_analyst(
+    req: AnalyzeRequest, checked: CheckedCode, stats: RunStats | None = None
+) -> AnalyzeResponse:
     model_name = get_settings().openai_model
     ctx = AnalystContext(
         code=req.code, level=req.level, adapter=checked.adapter, facts=checked.facts
     )
-    agent = build_analyst(checked, req.level)
-    user_input = analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level)
     try:
-        result = await Runner.run(agent, user_input, context=ctx, max_turns=MAX_TURNS)
-        _add_usage(ctx, result)
-        try:
-            return verify_analysis(result.final_output, ctx, model_name)
-        except VerificationError as exc:
-            if ctx.elapsed() > RETRY_BUDGET_SECONDS:
-                raise
-            # 처음부터 다시 실행하지 않고, 같은 대화에 검증 오류를 붙여 모델이 고치게 한다.
-            retry_input = result.to_input_list() + [
-                {
-                    "role": "user",
-                    "content": f"출력에 다음 오류가 있다. 고쳐서 다시 출력하라.\n{exc.report()}",
-                }
-            ]
-            result = await Runner.run(agent, retry_input, context=ctx, max_turns=RETRY_MAX_TURNS)
-            _add_usage(ctx, result)
-            return verify_analysis(result.final_output, ctx, model_name)
+        return await runtime.run_with_correction(
+            build_analyst(checked, req.level),
+            analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level),
+            lambda output: verify_analysis(output, ctx, model_name),
+            stats=stats or RunStats(),
+            context=ctx,
+            max_turns=MAX_TURNS,
+            retry_max_turns=RETRY_MAX_TURNS,
+            may_retry=lambda: ctx.elapsed() <= RETRY_BUDGET_SECONDS,
+        )
     except UserError as exc:
         # 도구 안의 예외는 SDK가 UserError로 감싼다(failure_error_function=None).
         if not isinstance(exc.__cause__, ToolContractError):

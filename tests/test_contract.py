@@ -106,7 +106,7 @@ def test_unknown_route_uses_error_shape(client):
 
 def test_judge_accepts_null_choice_for_skip(client):
     response = client.post("/api/judge", json={"decisionPoint": _decision_point(), "choice": None})
-    assert response.status_code == 501  # 계약 통과, 구현은 BE-07
+    assert response.status_code != 400  # 계약 통과(모델 호출은 conftest의 빈 대본에서 실패)
 
 
 # --- 로그 규칙 ----------------------------------------------------------

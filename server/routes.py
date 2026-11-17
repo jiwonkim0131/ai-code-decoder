@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from server.agents.analyst import run_analyst
+from server.agents.judge import run_judge
 from server.errors import ApiError, ErrorCode
 from server.intake import check_code
 from server.models import (
@@ -62,7 +63,7 @@ async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 @router.post("/judge", response_model=Verdict, tags=["learning"])
 async def judge(req: JudgeRequest) -> Verdict:
     """사용자의 답을 변별 조건으로 판정한다. choice가 null이면 설명 모드다."""
-    raise _not_implemented("BE-07")
+    return await run_judge(req)
 
 
 @router.post("/scenario", response_model=ScenarioResponse, tags=["learning"])

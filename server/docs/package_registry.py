@@ -63,3 +63,12 @@ PACKAGE_DOCS: dict[str, PackageDocs] = {
 def registered_package(module: str) -> PackageDocs | None:
     """Return the registry entry for a module's top-level package, if any."""
     return PACKAGE_DOCS.get(module.split(".", 1)[0])
+
+
+PYTHON_DOCS_URL = "https://docs.python.org/"
+
+
+def is_official_docs_url(url: str) -> bool:
+    """docs.python.org나 등록된 패키지 문서 사이트의 URL인지(FE가 보낸 URL을 다시 내보낼 때)."""
+    prefixes = (PYTHON_DOCS_URL, *(package.docs_url for package in PACKAGE_DOCS.values()))
+    return url.startswith(prefixes)

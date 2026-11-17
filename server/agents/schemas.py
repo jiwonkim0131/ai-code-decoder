@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from server.models import BadgeKind, OptionId
+from server.models import BadgeKind, ConditionStatus, OptionId
 
 
 class _Draft(BaseModel):
@@ -70,3 +70,34 @@ class DraftDecisionPoint(_Draft):
 class AnalysisDraft(_Draft):
     steps: list[DraftStep]
     decision_points: list[DraftDecisionPoint]
+
+
+# --- 판정(Judge) --------------------------------------------------------
+
+
+class DraftConditionVerdict(_Draft):
+    id: str = Field(description="입력 조건의 id 그대로")
+    status: ConditionStatus | None = Field(
+        description="hit(답이 이 조건을 짚음) 또는 miss. 건너뛰기(설명 모드)면 null"
+    )
+    note: str = Field(description="왜 짚음·놓침인지. 설명 모드면 이 조건이 왜 중요한지")
+
+
+class DraftCodeChoice(_Draft):
+    summary: str = Field(description="이 코드가 그 선택지를 고른 이유를 조건으로 설명")
+    intent_note: str = Field(description="작성자 의도를 무엇에서 추정했는지 한 문장")
+
+
+class DraftTradeoffRow(_Draft):
+    """방식 이름과 "이 코드" 표시는 서버가 선택지와 code_option으로 채운다."""
+
+    option_id: OptionId = Field(description="이 행이 설명하는 선택지 id")
+    wait_time: str = Field(description="기다리는 시간")
+    on_failure: str = Field(description="하나가 실패했을 때의 동작")
+    complexity: str = Field(description="구현·운영 복잡도")
+
+
+class JudgeDraft(_Draft):
+    conditions: list[DraftConditionVerdict]
+    code_choice: DraftCodeChoice
+    tradeoffs: list[DraftTradeoffRow] = Field(description="선택지마다 한 행")

@@ -122,3 +122,37 @@ def input_text(call) -> str:
     if isinstance(call.input, str):
         return call.input
     return "\n".join(str(item.get("content", item)) for item in call.input)
+
+
+def api_decision_point() -> dict:
+    """FE가 analyze 응답에서 받아 judge에 다시 보내는 결정 지점(camelCase)."""
+    dp = decision_point()
+    return {
+        "id": dp["id"],
+        "stepId": dp["step_id"],
+        "lines": dp["lines"],
+        "prompt": dp["prompt"],
+        "options": dp["options"],
+        "codeOption": dp["code_option"],
+        "hint": dp["hint"],
+        "conditions": dp["conditions"],
+    }
+
+
+def judge_draft(statuses: dict[str, str | None] | None = None, **overrides: Any) -> dict:
+    statuses = statuses if statuses is not None else {"c1": "hit", "c2": "miss"}
+    data = {
+        "conditions": [
+            {"id": cid, "status": status, "note": f"{cid} 설명"} for cid, status in statuses.items()
+        ],
+        "code_choice": {
+            "summary": "부분 실패를 허용하려고",
+            "intent_note": "return_exceptions에서",
+        },
+        "tradeoffs": [
+            {"option_id": oid, "wait_time": "w", "on_failure": "f", "complexity": "c"}
+            for oid in "DCBA"  # 순서는 서버가 정렬한다
+        ],
+    }
+    data.update(overrides)
+    return data

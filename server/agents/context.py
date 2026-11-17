@@ -38,7 +38,6 @@ class AnalystContext:
     started: float = field(default_factory=time.perf_counter)
     calls: list[ToolCallRecord] = field(default_factory=list)
     docs: list[DocumentationEvidence] = field(default_factory=list)
-    tokens: int = 0
 
     def elapsed(self) -> float:
         return time.perf_counter() - self.started
