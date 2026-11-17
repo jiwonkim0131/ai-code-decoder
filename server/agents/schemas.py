@@ -101,3 +101,17 @@ class JudgeDraft(_Draft):
     conditions: list[DraftConditionVerdict]
     code_choice: DraftCodeChoice
     tradeoffs: list[DraftTradeoffRow] = Field(description="선택지마다 한 행")
+
+
+# --- 코치(Coach) --------------------------------------------------------
+
+
+class ScenarioDraft(_Draft):
+    question: str = Field(description="실패 주입 질문. 물음표는 끝에 하나만")
+    follow_up: str = Field(description="답할 때 생각해 볼 점 한 문장(답을 말하지 않음)")
+
+
+class FeedbackDraft(_Draft):
+    verdict: str = Field(description="답 전체에 대한 한 줄 평")
+    points: list[str] = Field(description="잘한 점 0~3개. 답에 실제로 있는 내용만")
+    further: str = Field(description='"더 생각해 볼 것" 1~2문장')

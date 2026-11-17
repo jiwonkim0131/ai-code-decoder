@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from server.agents.analyst import run_analyst
+from server.agents.coach import run_feedback, run_scenario
 from server.agents.judge import run_judge
 from server.errors import ApiError, ErrorCode
 from server.intake import check_code
@@ -33,10 +34,6 @@ ERROR_RESPONSES = {
 }
 
 router = APIRouter(prefix="/api", responses=ERROR_RESPONSES)
-
-
-def _not_implemented(feature: str) -> ApiError:
-    return ApiError(501, ErrorCode.NOT_IMPLEMENTED, f"아직 구현되지 않았어요({feature}).")
 
 
 @router.post("/scan", response_model=ScanResponse, tags=["analysis"])
@@ -69,12 +66,10 @@ async def judge(req: JudgeRequest) -> Verdict:
 @router.post("/scenario", response_model=ScenarioResponse, tags=["learning"])
 async def scenario(req: ScenarioRequest) -> ScenarioResponse:
     """제약 프리셋에 맞는 실패 주입 질문을 만든다."""
-    check_code(req.code)
-    raise _not_implemented("BE-08")
+    return await run_scenario(req, check_code(req.code))
 
 
 @router.post("/feedback", response_model=FeedbackResponse, tags=["learning"])
 async def feedback(req: FeedbackRequest) -> FeedbackResponse:
     """실패 주입 질문에 대한 답을 평가한다."""
-    check_code(req.code)
-    raise _not_implemented("BE-08")
+    return await run_feedback(req, check_code(req.code))

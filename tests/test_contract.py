@@ -90,14 +90,6 @@ def test_validation_error_is_400_input_invalid_without_echoing_code(client):
     assert secret_like_code not in response.text
 
 
-def test_unimplemented_route_uses_error_shape(client):
-    response = client.post("/api/scenario", json={"code": "x = 1", "preset": "latency"})
-    assert response.status_code == 501
-    assert response.json() == {
-        "error": {"code": "not_implemented", "message": "아직 구현되지 않았어요(BE-08)."}
-    }
-
-
 def test_unknown_route_uses_error_shape(client):
     response = client.get("/api/nope")
     assert response.status_code == 404
