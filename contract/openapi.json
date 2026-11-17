@@ -69,6 +69,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -81,6 +91,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -131,6 +151,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -143,6 +173,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -193,6 +233,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -205,6 +255,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -255,6 +315,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -267,6 +337,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -317,6 +397,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -329,6 +419,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -728,6 +828,8 @@
           },
           "question": {
             "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
             "title": "Question"
           },
           "answer": {
@@ -784,6 +886,7 @@
               "$ref": "#/components/schemas/Evidence"
             },
             "type": "array",
+            "maxItems": 20,
             "title": "Evidence"
           },
           "choice": {
@@ -944,6 +1047,7 @@
               "$ref": "#/components/schemas/Step"
             },
             "type": "array",
+            "maxItems": 8,
             "title": "Steps"
           }
         },
@@ -969,6 +1073,8 @@
           },
           "question": {
             "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
             "title": "Question"
           },
           "followUp": {

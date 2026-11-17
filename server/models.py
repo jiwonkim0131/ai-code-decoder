@@ -15,6 +15,9 @@ from pydantic.alias_generators import to_camel
 MAX_CODE_CHARACTERS = 20_000
 MAX_QUESTION_CHARACTERS = 1_000
 MAX_ANSWER_CHARACTERS = 2_000
+# FE가 다시 보내 프롬프트에 들어가는 목록의 상한(비용·남용 보호, BE-09)
+MAX_STEPS = 8
+MAX_EVIDENCE = 20
 
 AudienceLevel = Literal["basic", "work", "deep"]
 OptionId = Literal["A", "B", "C", "D"]
@@ -156,7 +159,7 @@ class AnalyzeResponse(ApiModel):
 
 class JudgeRequest(ApiModel):
     decision_point: DecisionPoint
-    evidence: list[Evidence] = Field(default_factory=list)
+    evidence: list[Evidence] = Field(default_factory=list, max_length=MAX_EVIDENCE)
     choice: OptionId | None = None
     reason: str = Field(default="", max_length=MAX_ANSWER_CHARACTERS)
     level: AudienceLevel = "work"
@@ -212,19 +215,19 @@ class Verdict(ApiModel):
 class ScenarioRequest(ApiModel):
     code: Code
     preset: Preset
-    steps: list[Step] = Field(default_factory=list)
+    steps: list[Step] = Field(default_factory=list, max_length=MAX_STEPS)
 
 
 class ScenarioResponse(ApiModel):
     preset: Preset
-    question: str
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     follow_up: str
 
 
 class FeedbackRequest(ApiModel):
     code: Code
     preset: Preset
-    question: str
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     answer: str = Field(min_length=1, max_length=MAX_ANSWER_CHARACTERS)
 
 

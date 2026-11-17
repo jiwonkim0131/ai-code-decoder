@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from agents import Agent, MaxTurnsExceeded, ModelBehaviorError
+from agents import Agent, ModelSettings
 
 from server.agents import runtime
 from server.agents.prompts import (
@@ -25,6 +25,7 @@ from server.models import FeedbackRequest, FeedbackResponse, ScenarioRequest, Sc
 from server.verify import VerificationError
 
 MAX_TURNS = 1
+MAX_OUTPUT_TOKENS = 1000
 MAX_POINTS = 3
 
 
@@ -33,6 +34,7 @@ def _agent(name: str, instructions: str, output_type: type) -> Agent[None]:
         name=name,
         instructions=instructions,
         model=runtime.agent_model(get_settings()),
+        model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
         output_type=output_type,
     )
 
@@ -86,7 +88,7 @@ async def run_scenario(
             max_turns=MAX_TURNS,
             retry_max_turns=MAX_TURNS,
         )
-    except (VerificationError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except VerificationError as exc:
         raise _coach_failed() from exc
 
 
@@ -102,5 +104,5 @@ async def run_feedback(
             max_turns=MAX_TURNS,
             retry_max_turns=MAX_TURNS,
         )
-    except (VerificationError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except VerificationError as exc:
         raise _coach_failed() from exc

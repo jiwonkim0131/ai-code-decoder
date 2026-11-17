@@ -10,7 +10,7 @@ official URL(허용 도메인만)을 복사하고, 없으면 "추정"이다.
 
 from __future__ import annotations
 
-from agents import Agent, MaxTurnsExceeded, ModelBehaviorError
+from agents import Agent, ModelSettings
 
 from server.agents import runtime
 from server.agents.prompts import JUDGE_PROMPT, judge_input
@@ -32,6 +32,7 @@ from server.models import (
 from server.verify import VerificationError
 
 MAX_TURNS = 1  # 도구가 없어 최종 출력 한 번
+MAX_OUTPUT_TOKENS = 2000
 INTENT_NOTE = "작성자 의도는 코드에서 추정한 내용이에요."
 TRADEOFF_INFERRED_NOTE = "공식 문서로 확인한 내용이 없어 일반적인 동작을 바탕으로 정리했어요."
 
@@ -41,6 +42,7 @@ def build_judge() -> Agent[None]:
         name="Judge",
         instructions=JUDGE_PROMPT,
         model=runtime.agent_model(get_settings()),
+        model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
         output_type=JudgeDraft,
     )
 
@@ -132,7 +134,7 @@ async def run_judge(req: JudgeRequest, stats: RunStats | None = None) -> Verdict
             max_turns=MAX_TURNS,
             retry_max_turns=MAX_TURNS,
         )
-    except (VerificationError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except VerificationError as exc:
         raise ApiError(
             502, ErrorCode.ANALYSIS_FAILED, "판정에 실패했어요. 다시 시도해 주세요."
         ) from exc

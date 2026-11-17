@@ -16,6 +16,7 @@ import re
 from server.agents.context import AnalystContext
 from server.agents.schemas import AnalysisDraft, DraftEvidence, DraftStep
 from server.models import (
+    MAX_STEPS,
     AnalyzeMeta,
     AnalyzeResponse,
     Condition,
@@ -26,7 +27,6 @@ from server.models import (
     StepIO,
 )
 
-MAX_STEPS = 8
 MAX_DECISION_POINTS = 3
 OPTION_IDS = ("A", "B", "C", "D")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
