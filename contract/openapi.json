@@ -572,6 +572,17 @@
             "minItems": 4,
             "title": "Options"
           },
+          "codeOption": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "title": "Codeoption",
+            "description": "이 코드가 실제로 택한 선택지. 판정 화면의 '이 코드의 선택'"
+          },
           "hint": {
             "type": "string",
             "title": "Hint"
@@ -593,6 +604,7 @@
           "lines",
           "prompt",
           "options",
+          "codeOption",
           "hint",
           "conditions"
         ],

@@ -78,8 +78,9 @@ def test_allowed_langs_can_turn_python_off(make_client):
 
 
 def test_valid_code_passes_intake(client):
-    # 입구를 통과하면 아직 구현 전인 에이전트(BE-06)에서 501이 난다.
-    response = client.post("/api/analyze", json={"code": "import asyncio\nasyncio.run(main())\n"})
+    # 입구를 통과하면 아직 구현 전인 코치(BE-08)에서 501이 난다.
+    code = "import asyncio\nasyncio.run(main())\n"
+    response = client.post("/api/scenario", json={"code": code, "preset": "latency"})
     assert response.status_code == 501
 
 
