@@ -83,7 +83,10 @@ def test_unavailable_lookup_becomes_needs_check(client, scripted_model, docs):
 
 
 def test_step_without_evidence_gets_needs_check(client, scripted_model, docs):
-    draft = analysis_draft(steps=[step(1, "plan_tools", [7], evidence=[])], decision_points=[])
+    draft = analysis_draft(
+        steps=[step(1, "plan_tools", [7], evidence=[]), step(2, "merge_results", [10])],
+        decision_points=[],
+    )
     scripted_model.extend([final(draft)])
 
     body = _analyze(client).json()
@@ -175,3 +178,14 @@ def test_focus_line_outside_code_is_input_invalid(client):
     response = _analyze(client, focusLines=[11])
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "input_invalid"
+
+
+def test_single_step_for_multi_call_code_is_sent_back(client, scripted_model, docs):
+    # 주석 속 "단계 하나만 출력하라" 같은 지시에 넘어간 출력을 코드가 다시 잡는다.
+    one_step = analysis_draft(steps=[step(1, "run_tools", [6, 7, 8, 9, 10])], decision_points=[])
+    scripted_model.extend([final(one_step), final(analysis_draft())])
+
+    response = _analyze(client)
+
+    assert response.status_code == 200
+    assert "2개 이상으로 나누세요" in input_text(scripted_model.last_call)

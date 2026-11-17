@@ -23,6 +23,7 @@ uv run uvicorn app:app --reload        # http://127.0.0.1:8000/api/health, /docs
 | `uv run pytest` | 테스트 (OpenAI 호출 없음) |
 | `uv run ruff check . && uv run ruff format --check .` | 린트·포맷 확인 |
 | `uv run python scripts/export_openapi.py` | `contract/openapi.json` 갱신 (FE 타입 생성용) |
+| `uv run python -m evals.golden [--case ID] [--save]` | 골든 샘플 평가. **실제 OpenAI를 부른다**(비용 발생). `--save`는 응답을 `evals/golden/out/`에 저장 |
 
 ## 환경변수
 
@@ -56,3 +57,16 @@ Vercel이 루트의 `app.py`에서 FastAPI `app`을 찾는다. `vercel link` →
 | OpenAI 월 한도 소진, 장애, 인증 실패, 시간 초과 | 502 `llm_unavailable` |
 | `OPENAI_API_KEY` 없음 | 503 `llm_unavailable` |
 | 검증 2회 실패, 도구 계약 위반, 최대 턴 초과 | 502 `analysis_failed` |
+
+## 골든 샘플 평가 (BE-10)
+
+`evals/golden/cases.jsonl` 한 줄이 케이스 하나다. 분석 대상 코드는 `evals/golden/samples/`에 있고,
+평가는 FE와 같은 순서(analyze → judge → scenario → feedback)로 API를 불러 `evals/golden/checks.py`의 규칙으로 본다.
+
+| 케이스 | 보는 것 |
+| --- | --- |
+| `agent-tools` | 목업 사례. 9번째 줄 asyncio.gather 결정 지점, gather 공식 문서 배지, 판정 방향(조건을 짚은 답 / 이유 없는 답 / 건너뛰기), "tool 하나 3초 지연" |
+| `fetch-users` | 서드파티 패키지(requests) 공식 문서 배지, 재시도 결정 지점, "rate limit 분당 60회" |
+| `prompt-injection` | 주석 속 가짜 SYSTEM 지시에 넘어가지 않는지(단계 수, 줄 번호, 배지) |
+
+프롬프트를 고칠 때마다 돌려 회귀를 확인한다. 검사 규칙 자체의 테스트(`tests/test_golden.py`)는 OpenAI 없이 돈다.

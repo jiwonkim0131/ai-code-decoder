@@ -28,6 +28,8 @@ from server.models import (
 )
 
 MAX_DECISION_POINTS = 3
+# 호출이 이만큼 여러 줄에 있으면 단계 하나로 뭉치지 않게 한다(게으른 출력·주석 속 지시 대응)
+MIN_CALL_LINES_FOR_SPLIT = 3
 OPTION_IDS = ("A", "B", "C", "D")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -73,6 +75,12 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext) -> list[str]:
 
     if not draft.steps:
         errors.append("steps가 비어 있습니다. 단계를 하나 이상 만드세요.")
+    call_lines = {line for call in ctx.facts.calls for line in call.lines}
+    if len(call_lines) >= MIN_CALL_LINES_FOR_SPLIT and len(draft.steps) < 2:
+        errors.append(
+            f"호출이 {len(call_lines)}개 줄에 걸쳐 있는데 단계가 {len(draft.steps)}개입니다. "
+            "한 단계에 한 가지 동작만 담아 2개 이상으로 나누세요."
+        )
     if len(draft.steps) > MAX_STEPS:
         errors.append(f"단계가 {len(draft.steps)}개입니다. {MAX_STEPS}개 이하로 묶으세요.")
     step_ids = [step.id for step in draft.steps]
