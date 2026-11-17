@@ -70,3 +70,18 @@ Vercel이 루트의 `app.py`에서 FastAPI `app`을 찾는다. `vercel link` →
 | `prompt-injection` | 주석 속 가짜 SYSTEM 지시에 넘어가지 않는지(단계 수, 줄 번호, 배지) |
 
 프롬프트를 고칠 때마다 돌려 회귀를 확인한다. 검사 규칙 자체의 테스트(`tests/test_golden.py`)는 OpenAI 없이 돈다.
+
+## 확인용 FE (`web/`)
+
+API가 끝까지 도는지 보기 위한 간단한 React + TypeScript + Vite 화면이다(설계의 FE-01~12 전체가 아니다).
+타입은 `contract/openapi.json`에서 생성한다. 루트에 package.json을 두면 Vercel이 Vite 프로젝트로 인식할 수 있어 `web/`에 분리했다.
+
+```bash
+cd web && npm install
+npm run gen:api      # contract/openapi.json → src/api/schema.ts
+npm run dev          # http://localhost:5173 (uvicorn :8000으로 /api 프록시)
+npm run build        # web/dist → FastAPI가 같은 도메인에서 서빙(server/frontend.py)
+```
+
+`web/dist`가 있으면 `uv run uvicorn app:app`만으로 http://127.0.0.1:8000/ 에서 화면과 API를 함께 쓸 수 있다.
+배포에 포함하려면 Vercel 빌드에서 `web` 빌드를 돌리거나 dist를 함께 올려야 한다(아직 설정하지 않음).
