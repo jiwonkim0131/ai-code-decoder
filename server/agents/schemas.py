@@ -77,6 +77,10 @@ class AnalysisDraft(_Draft):
 
 class DraftConditionVerdict(_Draft):
     id: str = Field(description="입력 조건의 id 그대로")
+    quote: str = Field(
+        description="<answer>에서 이 조건을 다룬 부분을 고치지 않고 그대로 옮긴 것. "
+        "결론이 이 코드와 반대여도 조건을 따졌으면 옮긴다. 없으면 빈 문자열"
+    )
     status: ConditionStatus | None = Field(
         description="hit(답이 이 조건을 짚음) 또는 miss. 건너뛰기(설명 모드)면 null"
     )

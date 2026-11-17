@@ -189,3 +189,12 @@ def test_single_step_for_multi_call_code_is_sent_back(client, scripted_model, do
 
     assert response.status_code == 200
     assert "2개 이상으로 나누세요" in input_text(scripted_model.last_call)
+
+
+def test_symbol_error_suggests_names_on_those_lines(client, scripted_model, docs):
+    bad = analysis_draft(steps=[step(1, "list comprehension", [8]), step(2, "asyncio.gather", [9])])
+    scripted_model.extend([final(bad), final(analysis_draft())])
+
+    _analyze(client)
+
+    assert "(이 줄의 후보: call_tool" in input_text(scripted_model.last_call)

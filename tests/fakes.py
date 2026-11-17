@@ -143,7 +143,13 @@ def judge_draft(statuses: dict[str, str | None] | None = None, **overrides: Any)
     statuses = statuses if statuses is not None else {"c1": "hit", "c2": "miss"}
     data = {
         "conditions": [
-            {"id": cid, "status": status, "note": f"{cid} 설명"} for cid, status in statuses.items()
+            {
+                "id": cid,
+                "quote": "실패해도 계속" if status == "hit" else "",
+                "status": status,
+                "note": f"{cid} 설명",
+            }
+            for cid, status in statuses.items()
         ],
         "code_choice": {
             "summary": "부분 실패를 허용하려고",

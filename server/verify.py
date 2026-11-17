@@ -58,6 +58,15 @@ def _symbol_in_code(symbol: str, code: str, identifiers: set[str]) -> bool:
     return bool(names) and all(name in identifiers for name in names)
 
 
+def _symbol_hint(lines: list[int], ctx: AnalystContext) -> str:
+    """수정 요청에 붙일 후보: 그 단계 줄에 실제로 있는 호출·정의 이름."""
+    wanted = set(lines)
+    names = [call.name for call in ctx.facts.calls if wanted & set(call.lines)]
+    names += [s.name for s in ctx.facts.symbols if any(s.line <= n <= s.end_line for n in wanted)]
+    unique = list(dict.fromkeys(names))[:5]
+    return f"(이 줄의 후보: {', '.join(unique)})" if unique else ""
+
+
 def _check_lines(where: str, lines: list[int], line_count: int, errors: list[str]) -> None:
     if not lines:
         errors.append(f"{where}의 lines가 비어 있습니다.")
@@ -91,7 +100,10 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext) -> list[str]:
         where = f"{step.id}단계"
         _check_lines(where, step.lines, line_count, errors)
         if check_symbols and not _symbol_in_code(step.symbol, ctx.code, identifiers):
-            errors.append(f"{where}의 symbol '{step.symbol}'이 코드에 없습니다.")
+            errors.append(
+                f"{where}의 symbol '{step.symbol}'이 코드에 없습니다. "
+                f"코드에 적힌 이름을 쓰세요{_symbol_hint(step.lines, ctx)}."
+            )
         for evidence in step.evidence:
             if evidence.badge != "official" and not evidence.note.strip():
                 errors.append(f"{where}의 {evidence.badge} 근거에 note가 없습니다.")
