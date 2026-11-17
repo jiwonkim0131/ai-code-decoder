@@ -31,7 +31,7 @@ uv run uvicorn app:app --reload        # http://127.0.0.1:8000/api/health, /docs
 | `OPENAI_API_KEY` | OpenAI API 키. 로컬은 `.env`, 배포는 Vercel 환경변수에만 둔다 |
 | `OPENAI_MODEL` | 에이전트가 쓰는 모델 이름 |
 | `ALLOWED_LANGS` | 분석 허용 언어(쉼표 구분). 기본 `python` |
-| `ENABLE_DEV_ROUTES` | `true`면 에이전트 시험 API(`POST /api/dev/agent-ping`)를 연다. 배포에서는 `false` |
+| `ENABLE_DEV_ROUTES` | `true`면 실측용 API(`POST /api/dev/agent-ping`, `POST /api/dev/lookup-docs`)를 연다. 배포에서는 `false` |
 
 ## 배포 (Vercel)
 

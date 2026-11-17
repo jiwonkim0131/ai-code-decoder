@@ -36,7 +36,7 @@
           "analysis"
         ],
         "summary": "Scan",
-        "description": "비밀값 검사만 한다(LLM 호출 없음).",
+        "description": "비밀값 검사만 한다(LLM 호출 없음). 붙여넣기 직후와 \"값 가리기\" 뒤 재확인에 쓴다.",
         "operationId": "scan_api_scan_post",
         "requestBody": {
           "content": {
