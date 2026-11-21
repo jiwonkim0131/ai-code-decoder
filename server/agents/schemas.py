@@ -60,7 +60,9 @@ class DraftDecisionPoint(_Draft):
     id: str = Field(description="dp1, dp2, ...")
     step_id: int = Field(description="이 결정이 일어나는 단계 id")
     lines: list[int]
-    prompt: str = Field(description='"너라면?" 질문. 정답을 암시하지 않는다')
+    prompt: str = Field(
+        description='"~하려면 어떤 방식이 적절할까요?" 형태의 설계 선택 질문. 정답을 암시하지 않는다'
+    )
     options: list[DraftOption] = Field(description="A~D 4개. 하나는 이 코드의 선택")
     code_option: OptionId = Field(description="이 코드가 실제로 택한 선택지")
     hint: str = Field(description="정답을 말하지 않고 생각할 방향만 주는 힌트")
