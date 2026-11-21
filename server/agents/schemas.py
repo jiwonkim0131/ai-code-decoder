@@ -61,7 +61,8 @@ class DraftDecisionPoint(_Draft):
     step_id: int = Field(description="이 결정이 일어나는 단계 id")
     lines: list[int]
     prompt: str = Field(
-        description='"~하려면 어떤 방식이 적절할까요?" 형태의 설계 선택 질문. 정답을 암시하지 않는다'
+        description='"~하려면 어떤 방식이 적절할까요?" 형태의 설계 선택 질문. '
+        "정답을 암시하지 않는다"
     )
     options: list[DraftOption] = Field(description="A~D 4개. 하나는 이 코드의 선택")
     code_option: OptionId = Field(description="이 코드가 실제로 택한 선택지")
@@ -78,7 +79,8 @@ class AnalysisDraft(_Draft):
     steps: list[DraftStep]
     # decision_points보다 먼저 쓰게 해서 후보를 다 본 뒤 고르게 한다. 개수는 서버가 맞춰 본다.
     decision_candidates: list[DraftDecisionCandidate] = Field(
-        description="결정 지점을 쓰기 전에, 다른 방식도 가능했던 설계 결정 후보를 줄·관점별로 모두 나열"
+        description="결정 지점을 쓰기 전에, 다른 방식도 가능했던 설계 결정 후보를 "
+        "줄·관점별로 모두 나열"
     )
     decision_points: list[DraftDecisionPoint]
 

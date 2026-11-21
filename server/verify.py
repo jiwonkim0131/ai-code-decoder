@@ -111,13 +111,19 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext, require_counts: b
 
     for candidate in draft.decision_candidates:
         _check_lines(f"결정 후보 '{candidate.topic}'", candidate.lines, line_count, errors)
-    # 후보를 여럿 적고 결정 지점은 하나만 쓰는 출력을 되돌려 보낸다(여러 결정을 하나로 합치는 버릇 대응).
-    topics = {candidate.topic.strip() for candidate in draft.decision_candidates if candidate.topic.strip()}
+    # 후보를 여럿 적고 결정 지점은 하나만 쓰는 출력을 되돌려 보낸다.
+    # (여러 결정을 하나로 합치는 버릇 대응)
+    topics = {
+        candidate.topic.strip()
+        for candidate in draft.decision_candidates
+        if candidate.topic.strip()
+    }
     expected = min(len(topics), MAX_DECISION_POINTS)
     if require_counts and len(draft.decision_points) < expected:
         errors.append(
             f"결정 후보가 {len(topics)}개인데 결정 지점이 {len(draft.decision_points)}개입니다. "
-            f"후보마다 별도 결정 지점을 만들어 {expected}개로 맞추세요(여러 결정을 하나로 합치지 마세요)."
+            f"후보마다 별도 결정 지점을 만들어 {expected}개로 맞추세요"
+            "(여러 결정을 하나로 합치지 마세요)."
         )
     dp_ids = [dp.id for dp in draft.decision_points]
     if len(set(dp_ids)) != len(dp_ids):
@@ -136,7 +142,8 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext, require_counts: b
             errors.append(f"{where}에 결정을 가른 조건이 없습니다.")
         elif require_counts and len(dp.conditions) < MIN_CONDITIONS:
             errors.append(
-                f"{where}의 조건이 {len(dp.conditions)}개입니다. 서로 다른 관점의 조건을 {MIN_CONDITIONS}개 이상 쓰세요."
+                f"{where}의 조건이 {len(dp.conditions)}개입니다. "
+                f"서로 다른 관점의 조건을 {MIN_CONDITIONS}개 이상 쓰세요."
             )
         condition_ids = [condition.id for condition in dp.conditions]
         if len(set(condition_ids)) != len(condition_ids):
@@ -196,11 +203,15 @@ def verify_analysis(
 ) -> AnalyzeResponse:
     """검증을 통과하면 API 응답으로 옮기고, 실패하면 VerificationError(오류 목록).
 
-    require_counts는 결정 지점 수(후보 대비)와 조건 수 규칙이다. 출력 품질을 끌어올리는 규칙이라
-    첫 출력에서만 되돌려 보내고, 고친 출력에서는 모자라도 받는다(이것만으로 분석이 실패하지 않게)."""
+    require_counts는 결정 지점 수(후보 대비)와 조건 수 규칙이다. 출력 품질을 끌어올리는
+    규칙이라 첫 출력에서만 되돌려 보내고, 고친 출력에서는 모자라도 받는다
+    (이것만으로 분석이 실패하지 않게)."""
     if len(draft.decision_points) > MAX_DECISION_POINTS:
-        # 넘친 것은 오류로 돌려보내지 않고 앞의 것만 남긴다(프롬프트가 배울 가치가 큰 순서로 쓰게 한다).
-        draft = draft.model_copy(update={"decision_points": draft.decision_points[:MAX_DECISION_POINTS]})
+        # 넘친 것은 오류로 돌려보내지 않고 앞의 것만 남긴다.
+        # (프롬프트가 배울 가치가 큰 순서로 쓰게 한다)
+        draft = draft.model_copy(
+            update={"decision_points": draft.decision_points[:MAX_DECISION_POINTS]}
+        )
     errors = _collect_errors(draft, ctx, require_counts)
     if errors:
         raise VerificationError(errors)

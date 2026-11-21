@@ -76,7 +76,8 @@ async def run_analyst(
     attempts = 0
 
     def verify(output: AnalysisDraft) -> AnalyzeResponse:
-        # 개수 규칙은 고칠 기회가 남았을 때만 건다(재시도 예산을 넘겼거나 이미 고친 출력이면 받는다).
+        # 개수 규칙은 고칠 기회가 남았을 때만 건다.
+        # 재시도 예산을 넘겼거나 이미 고친 출력이면 모자라도 받는다.
         nonlocal attempts
         attempts += 1
         can_retry = attempts == 1 and ctx.elapsed() <= RETRY_BUDGET_SECONDS
