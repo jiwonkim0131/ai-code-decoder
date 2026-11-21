@@ -104,6 +104,11 @@ def analysis_draft(**overrides: Any) -> dict:
         "decision_points": [decision_point()],
     }
     data.update(overrides)
+    # 후보를 따로 주지 않으면 결정 지점마다 후보 하나로 맞춘다(개수 검증을 통과하는 기본값).
+    data.setdefault(
+        "decision_candidates",
+        [{"topic": dp["prompt"], "lines": dp["lines"]} for dp in data["decision_points"]],
+    )
     return data
 
 

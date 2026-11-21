@@ -69,8 +69,17 @@ class DraftDecisionPoint(_Draft):
     conditions: list[DraftCondition] = Field(description="결정을 가른 조건 2~4개")
 
 
+class DraftDecisionCandidate(_Draft):
+    topic: str = Field(description="무엇을 고른 결정인지(예: Semaphore로 동시 실행 수 제한)")
+    lines: list[int] = Field(description="그 결정이 드러나는 줄 번호들")
+
+
 class AnalysisDraft(_Draft):
     steps: list[DraftStep]
+    # decision_points보다 먼저 쓰게 해서 후보를 다 본 뒤 고르게 한다. 개수는 서버가 맞춰 본다.
+    decision_candidates: list[DraftDecisionCandidate] = Field(
+        description="결정 지점을 쓰기 전에, 다른 방식도 가능했던 설계 결정 후보를 줄·관점별로 모두 나열"
+    )
     decision_points: list[DraftDecisionPoint]
 
 

@@ -28,6 +28,7 @@ from server.models import (
 )
 
 MAX_DECISION_POINTS = 3
+MIN_CONDITIONS = 2
 # 호출이 이만큼 여러 줄에 있으면 단계 하나로 뭉치지 않게 한다(게으른 출력·주석 속 지시 대응)
 MIN_CALL_LINES_FOR_SPLIT = 3
 OPTION_IDS = ("A", "B", "C", "D")
@@ -76,7 +77,7 @@ def _check_lines(where: str, lines: list[int], line_count: int, errors: list[str
         errors.append(f"{where}의 {shown}번째 줄은 입력에 없습니다(입력 {line_count}줄).")
 
 
-def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext) -> list[str]:
+def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext, require_counts: bool) -> list[str]:
     errors: list[str] = []
     line_count = ctx.facts.line_count
     check_symbols = ctx.adapter.capabilities.static_verification
@@ -108,8 +109,16 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext) -> list[str]:
             if evidence.badge != "official" and not evidence.note.strip():
                 errors.append(f"{where}의 {evidence.badge} 근거에 note가 없습니다.")
 
-    if len(draft.decision_points) > MAX_DECISION_POINTS:
-        errors.append(f"결정 지점은 {MAX_DECISION_POINTS}개 이하로 고르세요.")
+    for candidate in draft.decision_candidates:
+        _check_lines(f"결정 후보 '{candidate.topic}'", candidate.lines, line_count, errors)
+    # 후보를 여럿 적고 결정 지점은 하나만 쓰는 출력을 되돌려 보낸다(여러 결정을 하나로 합치는 버릇 대응).
+    topics = {candidate.topic.strip() for candidate in draft.decision_candidates if candidate.topic.strip()}
+    expected = min(len(topics), MAX_DECISION_POINTS)
+    if require_counts and len(draft.decision_points) < expected:
+        errors.append(
+            f"결정 후보가 {len(topics)}개인데 결정 지점이 {len(draft.decision_points)}개입니다. "
+            f"후보마다 별도 결정 지점을 만들어 {expected}개로 맞추세요(여러 결정을 하나로 합치지 마세요)."
+        )
     dp_ids = [dp.id for dp in draft.decision_points]
     if len(set(dp_ids)) != len(dp_ids):
         errors.append(f"결정 지점 id가 중복됩니다: {dp_ids}")
@@ -125,6 +134,10 @@ def _collect_errors(draft: AnalysisDraft, ctx: AnalystContext) -> list[str]:
             errors.append(f"{where}의 code_option {dp.code_option}이 선택지에 없습니다.")
         if not dp.conditions:
             errors.append(f"{where}에 결정을 가른 조건이 없습니다.")
+        elif require_counts and len(dp.conditions) < MIN_CONDITIONS:
+            errors.append(
+                f"{where}의 조건이 {len(dp.conditions)}개입니다. 서로 다른 관점의 조건을 {MIN_CONDITIONS}개 이상 쓰세요."
+            )
         condition_ids = [condition.id for condition in dp.conditions]
         if len(set(condition_ids)) != len(condition_ids):
             errors.append(f"{where}의 조건 id가 중복됩니다: {condition_ids}")
@@ -178,9 +191,17 @@ def _apply_badge_policy(
     return Evidence(badge=evidence.badge, symbol=evidence.symbol, note=note)
 
 
-def verify_analysis(draft: AnalysisDraft, ctx: AnalystContext, model: str) -> AnalyzeResponse:
-    """검증을 통과하면 API 응답으로 옮기고, 실패하면 VerificationError(오류 목록)."""
-    errors = _collect_errors(draft, ctx)
+def verify_analysis(
+    draft: AnalysisDraft, ctx: AnalystContext, model: str, require_counts: bool = True
+) -> AnalyzeResponse:
+    """검증을 통과하면 API 응답으로 옮기고, 실패하면 VerificationError(오류 목록).
+
+    require_counts는 결정 지점 수(후보 대비)와 조건 수 규칙이다. 출력 품질을 끌어올리는 규칙이라
+    첫 출력에서만 되돌려 보내고, 고친 출력에서는 모자라도 받는다(이것만으로 분석이 실패하지 않게)."""
+    if len(draft.decision_points) > MAX_DECISION_POINTS:
+        # 넘친 것은 오류로 돌려보내지 않고 앞의 것만 남긴다(프롬프트가 배울 가치가 큰 순서로 쓰게 한다).
+        draft = draft.model_copy(update={"decision_points": draft.decision_points[:MAX_DECISION_POINTS]})
+    errors = _collect_errors(draft, ctx, require_counts)
     if errors:
         raise VerificationError(errors)
 
