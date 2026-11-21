@@ -527,7 +527,8 @@ tbody tr.mine { background: var(--accent-soft); }
 .panel.apply .question-row p { flex: 1; min-width: 0; margin: 0; }
 .apply-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .apply-actions button { min-width: 120px; }
-.apply-empty { margin: auto; text-align: center; }
+/* .panel > p의 margin: 0이 이기므로 패널 안 남는 칸을 채우고 그 안에서 가로·세로 가운데에 둔다 */
+.panel.apply > .apply-empty { flex: 1; display: grid; place-items: center; margin: 0; text-align: center; }
 /* 설계 응용: 답 칸은 높이를 고정하고 포커스 강조를 두지 않는다 */
 textarea.fixed { height: 132px; resize: none; }
 textarea.fixed:focus, textarea.fixed:focus-visible { border-color: var(--line-strong); outline: none; box-shadow: none; }
