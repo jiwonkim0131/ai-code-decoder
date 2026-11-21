@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from server.agents.analyst import run_analyst
-from server.agents.coach import run_feedback, run_scenario
+from server.agents.coach import run_feedback, run_model_answer, run_scenario
 from server.agents.guard import agent_call
 from server.agents.judge import run_judge
 from server.errors import ApiError, ErrorCode
@@ -20,6 +20,8 @@ from server.models import (
     FeedbackRequest,
     FeedbackResponse,
     JudgeRequest,
+    ModelAnswerRequest,
+    ModelAnswerResponse,
     ScanRequest,
     ScanResponse,
     ScenarioRequest,
@@ -74,6 +76,14 @@ async def scenario(req: ScenarioRequest) -> ScenarioResponse:
     checked = check_code(req.code)
     async with agent_call("scenario", checked.facts.line_count) as stats:
         return await run_scenario(req, checked, stats)
+
+
+@router.post("/model-answer", response_model=ModelAnswerResponse, tags=["learning"])
+async def model_answer(req: ModelAnswerRequest) -> ModelAnswerResponse:
+    """실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다."""
+    checked = check_code(req.code)
+    async with agent_call("model_answer", checked.facts.line_count) as stats:
+        return await run_model_answer(req, checked, stats)
 
 
 @router.post("/feedback", response_model=FeedbackResponse, tags=["learning"])

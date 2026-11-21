@@ -222,6 +222,17 @@ class ScenarioResponse(ApiModel):
     preset: Preset
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     follow_up: str
+    hint: str = Field(description="답을 말하지 않고 생각할 방향만 주는 힌트")
+
+
+class ModelAnswerRequest(ApiModel):
+    code: Code
+    preset: Preset
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
+
+
+class ModelAnswerResponse(ApiModel):
+    answer: str
 
 
 class FeedbackRequest(ApiModel):

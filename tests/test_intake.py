@@ -80,7 +80,15 @@ def test_allowed_langs_can_turn_python_off(make_client):
 
 def test_valid_code_passes_intake_and_reaches_the_model(client, scripted_model):
     scripted_model.extend(
-        [final({"question": "어떻게 될까요?", "follow_up": "9번째 줄을 보세요."})]
+        [
+            final(
+                {
+                    "question": "어떻게 될까요?",
+                    "follow_up": "9번째 줄을 보세요.",
+                    "hint": "힌트",
+                }
+            )
+        ]
     )
     code = "import asyncio\nasyncio.run(main())\n"
     response = client.post("/api/scenario", json={"code": code, "preset": "latency"})

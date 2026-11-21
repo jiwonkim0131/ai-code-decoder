@@ -358,6 +358,88 @@
         }
       }
     },
+    "/api/model-answer": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Model Answer",
+        "description": "실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다.",
+        "operationId": "model_answer_api_model_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAnswerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "호출 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/feedback": {
       "post": {
         "tags": [
@@ -930,6 +1012,54 @@
         ],
         "title": "JudgeRequest"
       },
+      "ModelAnswerRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "preset": {
+            "type": "string",
+            "enum": [
+              "latency",
+              "rateLimit",
+              "traffic",
+              "team"
+            ],
+            "title": "Preset"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "preset",
+          "question"
+        ],
+        "title": "ModelAnswerRequest"
+      },
+      "ModelAnswerResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "title": "ModelAnswerResponse"
+      },
       "MyAnswer": {
         "properties": {
           "choice": {
@@ -1080,6 +1210,11 @@
           "followUp": {
             "type": "string",
             "title": "Followup"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint",
+            "description": "답을 말하지 않고 생각할 방향만 주는 힌트"
           }
         },
         "additionalProperties": false,
@@ -1087,7 +1222,8 @@
         "required": [
           "preset",
           "question",
-          "followUp"
+          "followUp",
+          "hint"
         ],
         "title": "ScenarioResponse"
       },

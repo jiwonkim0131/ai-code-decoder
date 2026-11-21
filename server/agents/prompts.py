@@ -163,7 +163,29 @@ COACH_SCENARIO_PROMPT = f"""\
 - question: <preset> 상황에서 이 코드의 구체적인 줄·호출(<code>, <steps>)이 어떻게 동작할지 묻는 질문 하나.
   "이 코드에서 ~하면 ~는 어떻게 될까요?"처럼 코드에 붙여 묻는다. 물음표는 문장 끝에 하나만 쓴다.
   여러 질문을 묶지 않는다.
-- follow_up: 답할 때 볼 곳이나 따져 볼 기준 한 문장. 답을 말하지 않는다. 물음표를 쓰지 않는다.
+- follow_up: 질문 아래 붙는 짧은 안내 한 문장(60자 이내). 어디를 볼지만 말한다. 물음표를 쓰지 않는다.
+  좋은 예: "call_with_retry의 재시도 부분을 살펴보세요."
+- hint: 막혔을 때 여는 힌트 1~2문장. follow_up보다 구체적으로, 볼 줄 번호·호출과 무엇을 비교하거나
+  따라가 볼지만 알려 준다. 답은 사용자가 직접 찾아야 하므로 정답에 해당하는 내용은 뺀다.
+  - 쓰지 않는 것: 그 상황의 결과(예외 발생, 타임아웃, 호출 한도 초과, 병목, 대기열이 길어짐, None 반환 등),
+    원인과 결과를 잇는 설명("~해서 ~돼요"), 고칠 방법이나 대안.
+  - 결론을 "~할 수 있음을 떠올려 보세요", "~인지 생각해 보세요"로 감싸서 말하지 않는다. 감싸도 정답이다.
+  - 스스로 확인한다: 힌트만 읽고 question에 바로 답할 수 있으면 너무 많이 말한 것이니 줄인다.
+  좋은 예: "19줄 timeout 값과 call_tool이 걸리는 시간을 나란히 놓아 보세요. 17~21줄 반복문을 한 번씩 따라가 보세요."
+  나쁜 예: "19줄에서 timeout=1.5가 설정되어 있습니다. 3초가 걸리면 TimeoutError가 발생합니다." (결과를 말함)
+  나쁜 예: "27줄에서 모든 호출을 동시에 실행하면 분당 호출 제한이 넘을 수 있음을 떠올려 보세요." (결론을 감쌈)
+- 모든 문장은 "~해요/~세요" 말투로 쓰고 "~습니다"를 쓰지 않는다.
+"""
+
+COACH_MODEL_ANSWER_PROMPT = f"""\
+너는 설계 판단을 가르치는 코치다. <preset> 상황에서 <question>에 대한 모범 답변을 쓴다.
+한국어 존댓말(~해요)로 쓴다. {DATA_NOTICE}
+
+- answer: 3~5문장. 이 코드의 줄·호출을 들어 그 상황에서 무엇이 어떻게 달라지는지 먼저 설명하고,
+  어떻게 바꾸면 좋을지(타임아웃, 재시도·백오프, 동시성 제한, 캐시 등)를 이유와 함께 쓴다.
+  사용자가 자기 답과 비교해 보는 용도이므로 단정적인 정답 목록보다 판단 근거를 보여 준다.
+  "~해요" 말투로 쓰고 "~습니다"를 쓰지 않는다.
+  좋은 예: "19줄 wait_for의 timeout이 1.5초라 3초 걸리는 호출은 매번 타임아웃돼요. ..."
 """
 
 COACH_FEEDBACK_PROMPT = f"""\
@@ -194,6 +216,16 @@ def scenario_input(code: str, facts: StaticFacts, preset: str, steps) -> str:
         f"<code>\n{numbered_code(code)}\n</code>\n"
         f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
         f"<steps>\n{_steps_text(steps)}\n</steps>"
+    )
+
+
+def model_answer_input(code: str, facts: StaticFacts, preset: str, question: str) -> str:
+    name, situation = PRESETS[preset]
+    return (
+        f"<preset>{name}: {situation}</preset>\n"
+        f"<code>\n{numbered_code(code)}\n</code>\n"
+        f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
+        f"<question>\n{question.strip()}\n</question>"
     )
 
 

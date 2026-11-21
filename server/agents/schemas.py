@@ -125,7 +125,15 @@ class JudgeDraft(_Draft):
 
 class ScenarioDraft(_Draft):
     question: str = Field(description="실패 주입 질문. 물음표는 끝에 하나만")
-    follow_up: str = Field(description="답할 때 생각해 볼 점 한 문장(답을 말하지 않음)")
+    follow_up: str = Field(description="질문 아래 짧은 안내 한 문장(60자 이내). 어디를 볼지만")
+    hint: str = Field(
+        description="안내보다 구체적인 힌트 1~2문장. 볼 줄·호출과 비교할 것만 쓰고 "
+        "결과·정답은 쓰지 않음"
+    )
+
+
+class ModelAnswerDraft(_Draft):
+    answer: str = Field(description="질문의 모범 답변 3~5문장. 이 코드의 줄·호출을 들어 설명")
 
 
 class FeedbackDraft(_Draft):
