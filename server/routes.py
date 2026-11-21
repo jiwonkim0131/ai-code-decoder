@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from server.agents.analyst import run_analyst
-from server.agents.coach import run_feedback, run_model_answer, run_scenario
+from server.agents.coach import run_feedback, run_model_answer, run_scenario, run_summary
 from server.agents.guard import agent_call
 from server.agents.judge import run_judge
 from server.errors import ApiError, ErrorCode
@@ -26,6 +26,8 @@ from server.models import (
     ScanResponse,
     ScenarioRequest,
     ScenarioResponse,
+    SummaryRequest,
+    SummaryResponse,
     Verdict,
 )
 from server.secrets import scan_secrets
@@ -92,3 +94,10 @@ async def feedback(req: FeedbackRequest) -> FeedbackResponse:
     checked = check_code(req.code)
     async with agent_call("feedback", checked.facts.line_count) as stats:
         return await run_feedback(req, checked, stats)
+
+
+@router.post("/summary", response_model=SummaryResponse, tags=["learning"])
+async def summary(req: SummaryRequest) -> SummaryResponse:
+    """1~5단계 학습 기록으로 핵심 정리를 만든다. 코드는 받지 않는다(기록에 줄·심볼이 있음)."""
+    async with agent_call("summary") as stats:
+        return await run_summary(req, stats)

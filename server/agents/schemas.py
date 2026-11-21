@@ -136,6 +136,21 @@ class ModelAnswerDraft(_Draft):
     answer: str = Field(description="질문의 모범 답변 3~5문장. 이 코드의 줄·호출을 들어 설명")
 
 
+class DraftTakeaway(_Draft):
+    text: str = Field(description="배운 점 한 문장. 이 코드의 심볼·줄을 들어 구체적으로")
+    refs: list[str] = Field(
+        description='근거가 된 기록의 ref 1개 이상. 입력에 적힌 ref(예: "step:2", '
+        '"decision:dp1", "apply:latency")만'
+    )
+
+
+class SummaryDraft(_Draft):
+    takeaways: list[DraftTakeaway] = Field(description="핵심 정리 3~5개. 중요한 순서로")
+    review_points: list[str] = Field(
+        description="다시 볼 것 0~3개. 미반영 판단 기준이나 피드백의 아쉬운 점에서만"
+    )
+
+
 class FeedbackDraft(_Draft):
     verdict: str = Field(description="답 전체에 대한 한 줄 평")
     points: list[str] = Field(description="잘한 점 0~3개. 답에 실제로 있는 내용만")

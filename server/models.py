@@ -18,6 +18,8 @@ MAX_ANSWER_CHARACTERS = 2_000
 # FE가 다시 보내 프롬프트에 들어가는 목록의 상한(비용·남용 보호, BE-09)
 MAX_STEPS = 8
 MAX_EVIDENCE = 20
+MAX_DECISIONS = 3  # 분석이 내는 결정 지점 상한과 같다
+MAX_APPLICATIONS = 4  # 프리셋 수
 
 AudienceLevel = Literal["basic", "work", "deep"]
 OptionId = Literal["A", "B", "C", "D"]
@@ -246,6 +248,51 @@ class FeedbackResponse(ApiModel):
     verdict: str
     points: list[str]
     further: str
+
+
+# --- POST /api/summary --------------------------------------------------
+
+
+class SummaryDecision(ApiModel):
+    """설계 선택·비교 한 건. 판정 화면에 쓴 그대로 다시 보낸다."""
+
+    decision_point: DecisionPoint
+    verdict: Verdict
+
+
+class SummaryApplication(ApiModel):
+    """설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다."""
+
+    preset: Preset
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
+    answer: str = Field(default="", max_length=MAX_ANSWER_CHARACTERS)
+    feedback: FeedbackResponse | None = None
+    model_answer: str | None = Field(default=None, max_length=MAX_ANSWER_CHARACTERS)
+
+
+class SummaryRequest(ApiModel):
+    """학습 정리. 서버가 학습 기록을 기억하지 않으므로 FE가 1~5단계 결과를 모아 보낸다.
+
+    코드는 보내지 않는다(단계·결정 지점에 줄과 심볼이 있다)."""
+
+    steps: list[Step] = Field(min_length=1, max_length=MAX_STEPS)
+    decisions: list[SummaryDecision] = Field(default_factory=list, max_length=MAX_DECISIONS)
+    applications: list[SummaryApplication] = Field(
+        default_factory=list, max_length=MAX_APPLICATIONS
+    )
+
+
+class Takeaway(ApiModel):
+    text: str
+    refs: list[str] = Field(
+        min_length=1,
+        description='근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<preset>"',
+    )
+
+
+class SummaryResponse(ApiModel):
+    takeaways: list[Takeaway]
+    review_points: list[str] = Field(description="다시 볼 것(놓친 판단 기준, 더 생각해 볼 점)")
 
 
 # --- 오류 ---------------------------------------------------------------

@@ -1,8 +1,8 @@
-"""코치 `POST /api/scenario`, `POST /api/feedback`(BE-08).
+"""코치 `POST /api/scenario`, `/api/feedback`, `/api/model-answer`, `/api/summary`(BE-08).
 
 도구 없는 구조화 호출(Coach)이다. 코드를 받으므로 라우트에서 analyze와 같은 입구 검사(허용 언어,
 비밀값, 정적 분석)를 거치고, 서버가 사실 목록을 기억하지 않으니 요청마다 다시 만든다.
-학습 정리(짚은 조건 수 등)는 FE가 판정 결과로 계산한다.
+학습 정리는 FE가 1~5단계 결과를 모아 보내고, 서버는 핵심 정리만 쓴다(기록 자체는 FE가 문서로 조립).
 """
 
 from __future__ import annotations
@@ -18,12 +18,14 @@ from server.agents.prompts import (
     COACH_FEEDBACK_PROMPT,
     COACH_MODEL_ANSWER_PROMPT,
     COACH_SCENARIO_PROMPT,
+    SUMMARY_PROMPT,
     feedback_input,
     model_answer_input,
     scenario_input,
+    summary_input,
 )
 from server.agents.runtime import RunStats
-from server.agents.schemas import FeedbackDraft, ModelAnswerDraft, ScenarioDraft
+from server.agents.schemas import FeedbackDraft, ModelAnswerDraft, ScenarioDraft, SummaryDraft
 from server.config import get_settings
 from server.errors import ApiError, ErrorCode
 from server.intake import CheckedCode
@@ -34,6 +36,9 @@ from server.models import (
     ModelAnswerResponse,
     ScenarioRequest,
     ScenarioResponse,
+    SummaryRequest,
+    SummaryResponse,
+    Takeaway,
 )
 from server.verify import VerificationError
 
@@ -46,6 +51,8 @@ _SENTENCE_END = re.compile(r"[.!?](?=\s|$)")  # 1.5 같은 숫자의 점은 세�
 _FORMAL_ENDING = re.compile(r"니(다|까)[.!?]?(?=\s|$)")
 MAX_OUTPUT_TOKENS = 1000
 MAX_POINTS = 3
+TAKEAWAYS = (3, 5)
+MAX_REVIEW_POINTS = 3
 
 
 def _agent(name: str, instructions: str, output_type: type) -> Agent[None]:
@@ -151,6 +158,53 @@ def verify_feedback(draft: FeedbackDraft) -> FeedbackResponse:
     )
 
 
+def summary_refs(req: SummaryRequest) -> set[str]:
+    return (
+        {f"step:{step.id}" for step in req.steps}
+        | {f"decision:{item.decision_point.id}" for item in req.decisions}
+        | {f"apply:{item.preset}" for item in req.applications}
+    )
+
+
+def verify_summary(
+    draft: SummaryDraft, refs: set[str], check_style: bool = True
+) -> SummaryResponse:
+    takeaways = [t for t in draft.takeaways if t.text.strip()]
+    review_points = [point.strip() for point in draft.review_points if point.strip()]
+    errors: list[str] = []
+    low, high = TAKEAWAYS
+    if not takeaways:
+        errors.append("takeaways가 비어 있습니다.")
+    for i, takeaway in enumerate(takeaways, 1):
+        unknown = [ref for ref in takeaway.refs if ref not in refs]
+        if not takeaway.refs or unknown:
+            errors.append(
+                f"takeaways[{i}]의 refs {unknown or '[]'}는 입력에 없습니다. "
+                f"[ref]로 적힌 값({', '.join(sorted(refs))})만 1개 이상 쓰세요."
+            )
+    if check_style:
+        if not low <= len(takeaways) <= high:
+            errors.append(f"takeaways는 {low}~{high}개여야 합니다(현재 {len(takeaways)}개).")
+        if len(review_points) > MAX_REVIEW_POINTS:
+            errors.append(
+                f"review_points는 {MAX_REVIEW_POINTS}개 이하로 고르세요"
+                f"(현재 {len(review_points)}개)."
+            )
+        for i, takeaway in enumerate(takeaways, 1):
+            errors += _style_errors(f"takeaways[{i}]", takeaway.text)
+        for i, point in enumerate(review_points, 1):
+            errors += _style_errors(f"review_points[{i}]", point)
+    if errors:
+        raise VerificationError(errors)
+    return SummaryResponse(
+        takeaways=[
+            Takeaway(text=t.text.strip(), refs=list(dict.fromkeys(t.refs)))
+            for t in takeaways[:high]
+        ],
+        review_points=review_points[:MAX_REVIEW_POINTS],
+    )
+
+
 def _coach_failed() -> ApiError:
     return ApiError(
         502, ErrorCode.ANALYSIS_FAILED, "코치 응답을 만들지 못했어요. 다시 시도해 주세요."
@@ -199,6 +253,23 @@ async def run_feedback(
             _agent("CoachFeedback", COACH_FEEDBACK_PROMPT, FeedbackDraft),
             feedback_input(req.code, checked.facts, req.preset, req.question, req.answer),
             verify_feedback,
+            stats=stats or RunStats(),
+            max_turns=MAX_TURNS,
+            retry_max_turns=MAX_TURNS,
+        )
+    except VerificationError as exc:
+        raise _coach_failed() from exc
+
+
+async def run_summary(req: SummaryRequest, stats: RunStats | None = None) -> SummaryResponse:
+    refs = summary_refs(req)
+    try:
+        return await runtime.run_with_correction(
+            _agent("CoachSummary", SUMMARY_PROMPT, SummaryDraft),
+            summary_input(req.steps, req.decisions, req.applications),
+            _style_on_first_try(
+                lambda output, check_style: verify_summary(output, refs, check_style)
+            ),
             stats=stats or RunStats(),
             max_turns=MAX_TURNS,
             retry_max_turns=MAX_TURNS,
