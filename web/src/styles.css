@@ -868,3 +868,6 @@ html:has(dialog[open]) { overflow: hidden; }
 .toast .dialog-close { position: static; flex-shrink: 0; width: 28px; height: 28px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* 학습 정리: 받는 HTML 보고서를 그대로 미리 본다 */
+.report-preview { width: 100%; height: calc(100vh - 260px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }

@@ -141,6 +141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Summary
+         * @description 1~5단계 학습 기록으로 핵심 정리를 만든다. 코드는 받지 않는다(기록에 줄·심볼이 있음).
+         */
+        post: operations["summary_api_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -443,6 +463,69 @@ export interface components {
             in: string;
             /** Out */
             out: string;
+        };
+        /**
+         * SummaryApplication
+         * @description 설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다.
+         */
+        SummaryApplication: {
+            /**
+             * Preset
+             * @enum {string}
+             */
+            preset: "latency" | "rateLimit" | "traffic" | "team";
+            /** Question */
+            question: string;
+            /**
+             * Answer
+             * @default
+             */
+            answer?: string;
+            feedback?: components["schemas"]["FeedbackResponse"] | null;
+            /** Modelanswer */
+            modelAnswer?: string | null;
+        };
+        /**
+         * SummaryDecision
+         * @description 설계 선택·비교 한 건. 판정 화면에 쓴 그대로 다시 보낸다.
+         */
+        SummaryDecision: {
+            decisionPoint: components["schemas"]["DecisionPoint"];
+            verdict: components["schemas"]["Verdict"];
+        };
+        /**
+         * SummaryRequest
+         * @description 학습 정리. 서버가 학습 기록을 기억하지 않으므로 FE가 1~5단계 결과를 모아 보낸다.
+         *
+         *     코드는 보내지 않는다(단계·결정 지점에 줄과 심볼이 있다).
+         */
+        SummaryRequest: {
+            /** Steps */
+            steps: components["schemas"]["Step"][];
+            /** Decisions */
+            decisions?: components["schemas"]["SummaryDecision"][];
+            /** Applications */
+            applications?: components["schemas"]["SummaryApplication"][];
+        };
+        /** SummaryResponse */
+        SummaryResponse: {
+            /** Takeaways */
+            takeaways: components["schemas"]["Takeaway"][];
+            /**
+             * Reviewpoints
+             * @description 다시 볼 것(놓친 판단 기준, 더 생각해 볼 점)
+             */
+            reviewPoints: string[];
+        };
+        /** Takeaway */
+        Takeaway: {
+            /** Text */
+            text: string;
+            /**
+             * Refs
+             * @description 근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<preset>"
+             */
+            refs: string[];
         };
         /**
          * ToolCall
@@ -891,6 +974,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    summary_api_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryResponse"];
                 };
             };
             /** @description 입력 오류 */

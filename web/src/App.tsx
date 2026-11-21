@@ -1,5 +1,5 @@
-// API 확인용 간단한 FE. 5단계 학습 흐름(코드 입력 → 코드 분석 → 설계 선택 → 설계 비교 → 설계 응용)을
-// 한 화면 상태로 돈다. 화면에 고정으로 두는 것은 안내·버튼 문구, 설명 수준 3개, 프리셋 4개, 5단계 이름뿐이다.
+// API 확인용 간단한 FE. 6단계 학습 흐름(코드 입력 → 코드 분석 → 설계 선택 → 설계 비교 → 설계 응용 → 학습 정리)을
+// 한 화면 상태로 돈다. 화면에 고정으로 두는 것은 안내·버튼 문구, 설명 수준 3개, 프리셋 4개, 6단계 이름뿐이다.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
@@ -16,12 +16,14 @@ import {
   type ScenarioResponse,
   type SecretFinding,
   type Step,
+  type SummaryResponse,
   type Verdict,
 } from "./api/client";
 import { Select } from "./components/Select";
 import { formatPasted, INDENT, leadingSpaces, nextIndent, reindent } from "./editing";
+import { buildHtml, buildMarkdown, formatLines, reportFileName, type ReportData } from "./report";
 
-type Stage = 0 | 1 | 2 | 3 | 4;
+type Stage = 0 | 1 | 2 | 3 | 4 | 5;
 type PresetWork = {
   scenario: ScenarioResponse;
   answer: string;
@@ -36,7 +38,7 @@ const STEP_STATE_LABEL: Record<StepState, string> = {
   skipped: "건너뜀",
   todo: "아직 진행하지 않음",
 };
-const STAGES = ["코드 입력", "코드 분석", "설계 선택", "설계 비교", "설계 응용"];
+const STAGES = ["코드 입력", "코드 분석", "설계 선택", "설계 비교", "설계 응용", "학습 정리"];
 // 단계 설명은 넓은 화면에서 두 줄 안에 들어가게 쓴다(헤더 높이를 두 줄로 고정한다).
 const STAGE_DESCRIPTIONS = [
   "이해가 필요한 코드를 붙여넣고, 원하는 설명 수준을 선택하세요.",
@@ -44,6 +46,7 @@ const STAGE_DESCRIPTIONS = [
   "이 설계 포인트에서 나라면 어떤 방식을 골랐을지 선택하고, 그 이유를 적어 보세요.",
   "내가 선택한 방식이 설계 시 고려해야 할 판단 기준을 얼마나 반영했는지 확인하고, 다른 방식들과 비교해 보세요.",
   "제약 조건이 변경되었을 때 이 설계에 어떤 변화가 생길지 고민해 보세요.",
+  "지금까지 학습한 내용 중 핵심을 정리했어요. HTML 보고서나 Markdown으로 받아 보관할 수 있어요.",
 ];
 // 서버가 분석할 수 있는 언어. 버전은 서버의 AST 파서 기준이다.
 const LANGUAGES = [{ id: "python", name: "Python", version: "3.12" }];
@@ -90,6 +93,7 @@ export default function App() {
   // 제약마다 질문·답·피드백을 따로 둬서, 제약을 오가도 이어서 쓰고 각각 제출할 수 있다.
   const [applied, setApplied] = useState<Partial<Record<Preset, PresetWork>>>({});
   const [restartDialog, setRestartDialog] = useState(false);
+  const [report, setReport] = useState<ReportData | null>(null);
 
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<{ error: ApiError; retry: () => void } | null>(null);
@@ -107,7 +111,8 @@ export default function App() {
     (i === 1 && analysis !== null) ||
     (i === 2 && dp !== undefined && reached >= 2) ||
     (i === 3 && verdict !== undefined) ||
-    (i === 4 && analysis !== null && reached >= 4);
+    (i === 4 && analysis !== null && reached >= 4) ||
+    (i === 5 && report !== null);
 
   // 단계 표시 상태: 현재 / 완료(그 단계의 일을 끝냄) / 건너뜀(이미 지나쳤지만 끝내지 않음) / 아직 안 감.
   const completed = (i: number) =>
@@ -119,7 +124,9 @@ export default function App() {
           ? Object.values(verdicts).some((v) => !v.skipped)
           : i === 3
             ? Object.keys(verdicts).length > 0
-            : Object.values(applied).some((w) => w?.feedback);
+            : i === 4
+              ? Object.values(applied).some((w) => w?.feedback)
+              : report !== null;
   const stepState = (i: number): StepState =>
     i === stage ? "current" : completed(i) ? "done" : i < reached ? "skipped" : "todo";
 
@@ -195,6 +202,7 @@ export default function App() {
     setSelectedStep(null);
     setApplied({});
     setPreset(null);
+    setReport(null);
     setReached(1);
     go(1);
   };
@@ -278,6 +286,50 @@ export default function App() {
     if (result) updateWork(p, { modelAnswer: result.answer, showModel: true });
   };
 
+  // 학습 정리: 1~5단계 기록을 모아 핵심 정리만 LLM에 맡기고, 문서는 기록으로 조립한다.
+  // 같은 기록이면 캐시된 정리를 쓰므로 단계를 오가도 다시 만들지 않는다.
+  const openSummary = async () => {
+    if (!analysis) return;
+    const decisions = dps.filter((d) => verdicts[d.id]).map((d) => ({ dp: d, verdict: verdicts[d.id] }));
+    const applications = PRESETS.flatMap(([p, presetName]) => {
+      const w = applied[p];
+      return w
+        ? [{ preset: p, presetName, scenario: w.scenario, answer: w.answer, feedback: w.feedback, modelAnswer: w.modelAnswer }]
+        : [];
+    });
+    const summary: SummaryResponse | null = await run(
+      "학습 정리",
+      () =>
+        api.summary({
+          steps: analysis.steps,
+          decisions: decisions.map(({ dp, verdict }) => ({ decisionPoint: dp, verdict })),
+          applications: applications.map((a) => ({
+            preset: a.preset,
+            question: a.scenario.question,
+            answer: a.answer,
+            feedback: a.feedback,
+            modelAnswer: a.modelAnswer,
+          })),
+        }),
+      openSummary,
+    );
+    if (!summary) return;
+    setReport({ createdAt: new Date(), languageName: language_.name, code, analysis, decisions, applications, summary });
+    go(5);
+  };
+
+  const download = (ext: "md" | "html") => {
+    if (!report) return;
+    const text = ext === "md" ? buildMarkdown(report) : buildHtml(report);
+    const url = URL.createObjectURL(new Blob([text], { type: ext === "md" ? "text/markdown;charset=utf-8" : "text/html;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = reportFileName(report, ext);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+  const reportHtml = useMemo(() => (report ? buildHtml(report) : ""), [report]);
+
   const restart = () => {
     setRestartDialog(false);
     setCode("");
@@ -287,6 +339,7 @@ export default function App() {
     setVerdicts({});
     setApplied({});
     setPreset(null);
+    setReport(null);
     setReached(0);
     go(0);
   };
@@ -366,9 +419,18 @@ export default function App() {
       );
   } else if (stage === 4) {
     footer = (
-      <button className="primary" disabled={busy} onClick={() => setRestartDialog(true)}>
-        코드 입력
+      <button className="primary" disabled={busy} onClick={openSummary}>
+        학습 정리
       </button>
+    );
+  } else if (stage === 5 && report) {
+    footer = (
+      <>
+        <button onClick={() => download("md")}>Markdown 받기</button>
+        <button className="primary" onClick={() => download("html")}>
+          HTML 보고서 받기
+        </button>
+      </>
     );
   }
 
@@ -407,7 +469,7 @@ export default function App() {
                     disabled={!available(i) || loading !== null}
                     aria-current={state === "current" ? "step" : undefined}
                     title={STEP_STATE_LABEL[state]}
-                    onClick={() => go(i as Stage)}
+                    onClick={() => (i === 5 ? openSummary() : go(i as Stage))}
                   >
                     <StepMark state={state} n={i + 1} />
                     {name}
@@ -747,6 +809,10 @@ export default function App() {
               )}
             </div>
           )}
+          {stage === 5 && report && (
+            // 받는 HTML 보고서를 그대로 미리 보여 준다(스크립트 없는 문서라 sandbox로 막아 둔다).
+            <iframe className="report-preview" title="학습 결과 요약 미리보기" sandbox="" srcDoc={reportHtml} />
+          )}
         </main>
 
       </div>
@@ -825,6 +891,7 @@ const LOADING_TITLES: Record<string, string> = {
   분석: "코드를 분석하고 있어요",
   "질문 만들기": "질문을 생성하고 있어요",
   "모범 답변": "모범 답변을 생성하고 있어요",
+  "학습 정리": "학습 내용을 정리하고 있어요",
 };
 
 function LoadingDialog({ label }: { label: string | null }) {
@@ -1328,17 +1395,6 @@ function highlightLines(code: string): Token[][] {
 }
 
 // 줄 번호 목록을 범위로 줄인다: [5, 6, 7, 9] → "5-7, 9"
-function formatLines(lines: number[]): string {
-  const sorted = [...new Set(lines)].sort((a, b) => a - b);
-  const ranges: string[] = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const start = sorted[i];
-    while (sorted[i + 1] === sorted[i] + 1) i++;
-    ranges.push(start === sorted[i] ? `${start}` : `${start}-${sorted[i]}`);
-  }
-  return ranges.join(", ");
-}
-
 // 코드 분석 단계 카드. 카드 사이 세로선이 번호를 이어 실행 순서를 보여 준다.
 // 카드 어디를 눌러도 선택되고, 키보드는 제목 버튼으로 같은 동작을 한다(근거의 문서 링크와 겹치지 않게).
 function StepCard({ step, selected, onSelect }: { step: Step; selected: boolean; onSelect: () => void }) {

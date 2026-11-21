@@ -12,6 +12,8 @@ export type Verdict = S["Verdict"];
 export type JudgeRequest = S["JudgeRequest"];
 export type ScenarioResponse = S["ScenarioResponse"];
 export type FeedbackResponse = S["FeedbackResponse"];
+export type SummaryRequest = S["SummaryRequest"];
+export type SummaryResponse = S["SummaryResponse"];
 export type Preset = ScenarioResponse["preset"];
 export type Level = NonNullable<AnalyzeRequest["level"]>;
 export type OptionId = DecisionPoint["codeOption"];
@@ -107,6 +109,8 @@ export const api = {
     post<FeedbackResponse>("/api/feedback", { code, preset, question, answer }),
   modelAnswer: (code: string, preset: Preset, question: string) =>
     cachedPost<S["ModelAnswerResponse"]>("/api/model-answer", { code, preset, question }),
+  // 같은 학습 기록이면 같은 정리를 쓴다(기록이 바뀌면 키가 달라져 새로 만든다).
+  summary: (body: SummaryRequest) => cachedPost<SummaryResponse>("/api/summary", body),
 };
 
 export const MAX_CODE_CHARACTERS = 20_000;
