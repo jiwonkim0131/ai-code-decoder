@@ -22,7 +22,13 @@ import { Select } from "./components/Select";
 import { formatPasted, INDENT, leadingSpaces, nextIndent, reindent } from "./editing";
 
 type Stage = 0 | 1 | 2 | 3 | 4;
-type PresetWork = { scenario: ScenarioResponse; answer: string; feedback: FeedbackResponse | null };
+type PresetWork = {
+  scenario: ScenarioResponse;
+  answer: string;
+  feedback: FeedbackResponse | null;
+  modelAnswer: string | null; // 처음 볼 때 한 번만 받아 둔다
+  showModel: boolean; // 모범 답변을 펼쳤는지
+};
 type StepState = "current" | "done" | "skipped" | "todo";
 const STEP_STATE_LABEL: Record<StepState, string> = {
   current: "현재 단계",
@@ -121,6 +127,7 @@ export default function App() {
     setStage(next);
     setReached((r) => (next > r ? next : r));
     setError(null);
+    setShowHint(false);
   };
 
   async function run<T>(label: string, task: () => Promise<T>, retry: () => void): Promise<T | null> {
@@ -236,9 +243,11 @@ export default function App() {
 
   const pickPreset = async (p: Preset) => {
     setPreset(p);
+    setShowHint(false);
     if (applied[p]) return; // 한 번 만든 질문과 쓰던 답은 그대로 둔다
     const result = await run("질문 만들기", () => api.scenario(code, p, analysis?.steps ?? []), () => pickPreset(p));
-    if (result) setApplied((a) => ({ ...a, [p]: { scenario: result, answer: "", feedback: null } }));
+    if (result)
+      setApplied((a) => ({ ...a, [p]: { scenario: result, answer: "", feedback: null, modelAnswer: null, showModel: false } }));
   };
 
   // 제출한 뒤에도 답을 고쳐 다시 제출할 수 있고, 피드백은 마지막 제출 기준으로 바뀐다.
@@ -251,6 +260,22 @@ export default function App() {
       submitFeedback,
     );
     if (result) updateWork(p, { feedback: result });
+  };
+
+  // 모범 답변은 처음 펼칠 때만 만들고, 이후에는 받아 둔 것을 여닫는다.
+  const toggleModelAnswer = async () => {
+    if (!preset || !work) return;
+    const p = preset;
+    if (work.modelAnswer !== null) {
+      updateWork(p, { showModel: !work.showModel });
+      return;
+    }
+    const result = await run(
+      "모범 답변",
+      () => api.modelAnswer(code, p, work.scenario.question),
+      toggleModelAnswer,
+    );
+    if (result) updateWork(p, { modelAnswer: result.answer, showModel: true });
   };
 
   const restart = () => {
@@ -351,12 +376,22 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand">
-            <span className="brand-mark" aria-hidden="true">
-              &lt;/&gt;
-            </span>
-            <strong>AI Code Decoder</strong>
-          </div>
+          {/* 코드 입력 단계가 아니면 로고로 처음으로 돌아갈 수 있다(학습 내용이 사라지므로 확인 모달을 거친다). */}
+          {stage === 0 ? (
+            <div className="brand">
+              <span className="brand-mark" aria-hidden="true">
+                &lt;/&gt;
+              </span>
+              <strong>AI Code Decoder</strong>
+            </div>
+          ) : (
+            <button className="brand brand-button" aria-label="코드 입력으로 돌아가기" onClick={() => setRestartDialog(true)}>
+              <span className="brand-mark" aria-hidden="true">
+                &lt;/&gt;
+              </span>
+              <strong>AI Code Decoder</strong>
+            </button>
+          )}
           <nav className="stepnav" aria-label="학습 단계">
             {STAGES.map((name, i) => {
               const state = stepState(i);
@@ -521,23 +556,7 @@ export default function App() {
                     </div>
                     <div className="question-row">
                       <h2>{dp.prompt}</h2>
-                      <button
-                        className="hint-btn"
-                        aria-label="힌트 보기"
-                        aria-expanded={showHint}
-                        onClick={() => setShowHint(!showHint)}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-                          <path
-                            d="M8 1.5a4.5 4.5 0 0 0-2.7 8.1c.4.3.7.8.7 1.3V12h4v-1.1c0-.5.3-1 .7-1.3A4.5 4.5 0 0 0 8 1.5ZM6 13.5h4M6.8 15h2.4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.4"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
+                      <HintButton open={showHint} onToggle={() => setShowHint(!showHint)} />
                     </div>
                     <div className="options" role="radiogroup" aria-label="선택지">
                       {dp.options.map((o) => (
@@ -667,7 +686,10 @@ export default function App() {
                 {preset && work ? (
                   <>
                     <p className="question">{work.scenario.question}</p>
-                    <p className="muted small">{work.scenario.followUp}</p>
+                    <div className="question-row">
+                      <p className="muted small">{work.scenario.followUp}</p>
+                      <HintButton open={showHint} onToggle={() => setShowHint(!showHint)} />
+                    </div>
                     <textarea
                       className="fixed"
                       aria-label="답"
@@ -676,37 +698,53 @@ export default function App() {
                       placeholder="이 조건에서 설계가 어떻게 달라져야 할지 작성해 주세요."
                       onChange={(e) => updateWork(preset, { answer: e.target.value })}
                     />
-                    <button
-                      className="primary submit"
-                      disabled={!work.answer.trim() || loading !== null}
-                      onClick={submitFeedback}
-                    >
-                      제출
-                    </button>
-                    {work.feedback && (
-                      <div className="card feedback">
-                        <strong className="feedback-verdict">{work.feedback.verdict}</strong>
-                        {work.feedback.points.length > 0 && (
-                          <div className="feedback-part">
-                            <span className="badge hit">좋은 점</span>
-                            <ul>
-                              {work.feedback.points.map((p) => (
-                                <li key={p}>{p}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        <div className="feedback-part">
-                          <span className="badge further">아쉬운 점</span>
-                          <p>{work.feedback.further}</p>
-                        </div>
-                      </div>
-                    )}
+                    <div className="apply-actions">
+                      <button aria-pressed={work.showModel} disabled={loading !== null} onClick={toggleModelAnswer}>
+                        {work.showModel ? "모범 답변 숨기기" : "모범 답변 확인하기"}
+                      </button>
+                      <button
+                        className="primary"
+                        disabled={!work.answer.trim() || loading !== null}
+                        onClick={submitFeedback}
+                      >
+                        제출
+                      </button>
+                    </div>
                   </>
                 ) : (
-                  <p className="apply-empty muted">위에서 조건을 하나 선택하면 이 코드에 맞춘 질문이 나와요.</p>
+                  <p className="apply-empty muted">추가할 조건을 선택해 주세요.</p>
                 )}
               </section>
+              {/* 제출 결과와 모범 답변은 입력 칸 아래 별도 섹션에 모은다 */}
+              {work && (work.feedback || work.showModel) && (
+                <section className="panel result">
+                  {work.feedback && (
+                    <div className="feedback">
+                      <strong className="feedback-verdict">{work.feedback.verdict}</strong>
+                      {work.feedback.points.length > 0 && (
+                        <div className="feedback-part">
+                          <span className="badge hit">좋은 점</span>
+                          <ul>
+                            {work.feedback.points.map((p) => (
+                              <li key={p}>{p}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="feedback-part">
+                        <span className="badge further">아쉬운 점</span>
+                        <p>{work.feedback.further}</p>
+                      </div>
+                    </div>
+                  )}
+                  {work.showModel && (
+                    <div className="feedback-part model-answer">
+                      <span className="badge model">모범 답변</span>
+                      <p>{work.modelAnswer}</p>
+                    </div>
+                  )}
+                </section>
+              )}
             </div>
           )}
         </main>
@@ -748,6 +786,11 @@ export default function App() {
             {dp.hint}
           </Toast>
         )}
+        {stage === 4 && work && showHint && (
+          <Toast tone="hint" label="힌트" onClose={() => setShowHint(false)}>
+            {work.scenario.hint}
+          </Toast>
+        )}
       </div>
     </>
   );
@@ -777,6 +820,13 @@ function StepMark({ state, n }: { state: StepState; n: number }) {
 }
 
 // 진행 중 모달. 요청이 끝날 때까지 배경 클릭·Esc로 닫히지 않는다.
+// 작업 이름별 로딩 제목. 없으면 "{작업} 중이에요"로 쓴다.
+const LOADING_TITLES: Record<string, string> = {
+  분석: "코드를 분석하고 있어요",
+  "질문 만들기": "질문을 생성하고 있어요",
+  "모범 답변": "모범 답변을 생성하고 있어요",
+};
+
 function LoadingDialog({ label }: { label: string | null }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [seconds, setSeconds] = useState(0);
@@ -798,7 +848,7 @@ function LoadingDialog({ label }: { label: string | null }) {
     <dialog ref={ref} className="dialog loading" aria-labelledby="loading-title" onCancel={(e) => e.preventDefault()}>
       <div className="dialog-body" role="status" aria-live="polite">
         <span className="spinner" aria-hidden="true" />
-        <h2 id="loading-title">{label === "분석" ? "코드를 분석하고 있어요" : `${label} 중이에요`}</h2>
+        <h2 id="loading-title">{(label && LOADING_TITLES[label]) ?? `${label} 중이에요`}</h2>
         {label === "분석" ? (
           <>
             <ol className="progress">
@@ -899,6 +949,24 @@ function CodeView(props: { code: string; language: LanguageInfo; focus: Set<numb
         </div>
       </div>
     </div>
+  );
+}
+
+// 힌트 토스트를 여닫는 전구 버튼(설계 선택·설계 응용 공통).
+function HintButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button className="hint-btn" aria-label="힌트 보기" aria-expanded={open} onClick={onToggle}>
+      <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+        <path
+          d="M8 1.5a4.5 4.5 0 0 0-2.7 8.1c.4.3.7.8.7 1.3V12h4v-1.1c0-.5.3-1 .7-1.3A4.5 4.5 0 0 0 8 1.5ZM6 13.5h4M6.8 15h2.4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 

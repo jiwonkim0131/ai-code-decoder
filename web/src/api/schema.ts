@@ -101,6 +101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/model-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Model Answer
+         * @description 실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다.
+         */
+        post: operations["model_answer_api_model_answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/feedback": {
         parameters: {
             query?: never;
@@ -299,6 +319,23 @@ export interface components {
              */
             level?: "basic" | "work" | "deep";
         };
+        /** ModelAnswerRequest */
+        ModelAnswerRequest: {
+            /** Code */
+            code: string;
+            /**
+             * Preset
+             * @enum {string}
+             */
+            preset: "latency" | "rateLimit" | "traffic" | "team";
+            /** Question */
+            question: string;
+        };
+        /** ModelAnswerResponse */
+        ModelAnswerResponse: {
+            /** Answer */
+            answer: string;
+        };
         /** MyAnswer */
         MyAnswer: {
             /**
@@ -354,6 +391,11 @@ export interface components {
             question: string;
             /** Followup */
             followUp: string;
+            /**
+             * Hint
+             * @description 답을 말하지 않고 생각할 방향만 주는 힌트
+             */
+            hint: string;
         };
         /**
          * SecretFinding
@@ -711,6 +753,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScenarioResponse"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    model_answer_api_model_answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelAnswerResponse"];
                 };
             };
             /** @description 입력 오류 */

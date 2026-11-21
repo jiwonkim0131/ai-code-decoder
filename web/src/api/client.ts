@@ -58,6 +58,8 @@ export const api = {
     post<ScenarioResponse>("/api/scenario", { code, preset, steps }),
   feedback: (code: string, preset: Preset, question: string, answer: string) =>
     post<FeedbackResponse>("/api/feedback", { code, preset, question, answer }),
+  modelAnswer: (code: string, preset: Preset, question: string) =>
+    post<S["ModelAnswerResponse"]>("/api/model-answer", { code, preset, question }),
 };
 
 export const MAX_CODE_CHARACTERS = 20_000;
