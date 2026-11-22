@@ -90,14 +90,6 @@ def test_validation_error_is_400_input_invalid_without_echoing_code(client):
     assert secret_like_code not in response.text
 
 
-def test_unimplemented_route_uses_error_shape(client):
-    response = client.post("/api/scenario", json={"code": "x = 1", "preset": "latency"})
-    assert response.status_code == 501
-    assert response.json() == {
-        "error": {"code": "not_implemented", "message": "아직 구현되지 않았어요(BE-08)."}
-    }
-
-
 def test_unknown_route_uses_error_shape(client):
     response = client.get("/api/nope")
     assert response.status_code == 404
@@ -131,7 +123,15 @@ def test_request_log_has_no_body(client, caplog: pytest.LogCaptureFixture):
 
 def test_openapi_has_all_endpoints_and_no_dev_routes(client):
     paths = client.get("/openapi.json").json()["paths"]
-    for path in ("/api/scan", "/api/analyze", "/api/judge", "/api/scenario", "/api/feedback"):
+    for path in (
+        "/api/scan",
+        "/api/analyze",
+        "/api/judge",
+        "/api/scenario",
+        "/api/model-answer",
+        "/api/feedback",
+        "/api/summary",
+    ):
         assert path in paths
     assert not any(p.startswith("/api/dev") for p in paths)
 

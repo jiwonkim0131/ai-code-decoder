@@ -2,7 +2,8 @@
 
 도구 없는 구조화 LLM 호출이다(Judge, Agent + output_type). 서버는 기억하는 것이 없어 결정 지점과
 조건을 요청에서 받고, 조건은 데이터로만 다룬다. 출력의 조건 ID가 입력 조건과 정확히 맞는지
-(짚음 + 놓침 = 전체) 코드로 검증한다. choice가 null이면 채점 없는 설명 모드다.
+(짚음 + 놓침 = 전체), 짚음마다 사용자 답에서 그대로 옮긴 인용(quote)이 있는지 코드로 검증한다.
+choice가 null이면 채점 없는 설명 모드다.
 트레이드오프 표의 방식 이름과 "이 코드" 표시는 모델이 아니라 선택지와 codeOption으로 서버가 채운다.
 표 배지는 판정 에이전트가 문서를 조회하지 않으므로 요청에 실린 단계 evidence의
 official URL(허용 도메인만)을 복사하고, 없으면 "추정"이다.
@@ -10,7 +11,7 @@ official URL(허용 도메인만)을 복사하고, 없으면 "추정"이다.
 
 from __future__ import annotations
 
-from agents import Agent, MaxTurnsExceeded, ModelBehaviorError
+from agents import Agent, ModelSettings
 
 from server.agents import runtime
 from server.agents.prompts import JUDGE_PROMPT, judge_input
@@ -32,6 +33,7 @@ from server.models import (
 from server.verify import VerificationError
 
 MAX_TURNS = 1  # 도구가 없어 최종 출력 한 번
+MAX_OUTPUT_TOKENS = 2000
 INTENT_NOTE = "작성자 의도는 코드에서 추정한 내용이에요."
 TRADEOFF_INFERRED_NOTE = "공식 문서로 확인한 내용이 없어 일반적인 동작을 바탕으로 정리했어요."
 
@@ -41,6 +43,7 @@ def build_judge() -> Agent[None]:
         name="Judge",
         instructions=JUDGE_PROMPT,
         model=runtime.agent_model(get_settings()),
+        model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
         output_type=JudgeDraft,
     )
 
@@ -59,6 +62,11 @@ def tradeoff_evidence(evidence: list[Evidence]) -> Evidence:
     return Evidence(badge="official", symbol=official.symbol, url=official.url)
 
 
+def _normalize(text: str) -> str:
+    """인용 비교용: 공백·따옴표·말줄임표 차이는 무시한다."""
+    return "".join(ch for ch in text if not ch.isspace() and ch not in "\"'“”‘’…")
+
+
 def verify_verdict(draft: JudgeDraft, req: JudgeRequest) -> Verdict:
     dp = req.decision_point
     skipped = req.choice is None
@@ -71,6 +79,16 @@ def verify_verdict(draft: JudgeDraft, req: JudgeRequest) -> Verdict:
         missing = [c.id for c in draft.conditions if c.status is None]
         if missing:
             errors.append(f"조건 {missing}의 status가 비어 있습니다. hit 또는 miss로 판정하세요.")
+        answer = _normalize(req.reason)
+        for condition in draft.conditions:
+            if condition.status != "hit":
+                continue
+            quote = _normalize(condition.quote)
+            if not quote or quote not in answer:
+                errors.append(
+                    f"조건 {condition.id}가 hit인데 quote가 사용자 답에 그대로 있지 않습니다. "
+                    "답의 문장을 고치지 말고 옮기거나, 다룬 부분이 없으면 miss로 하세요."
+                )
     option_ids = sorted(option.id for option in dp.options)
     row_ids = sorted(row.option_id for row in draft.tradeoffs)
     if row_ids != option_ids:
@@ -132,7 +150,7 @@ async def run_judge(req: JudgeRequest, stats: RunStats | None = None) -> Verdict
             max_turns=MAX_TURNS,
             retry_max_turns=MAX_TURNS,
         )
-    except (VerificationError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except VerificationError as exc:
         raise ApiError(
             502, ErrorCode.ANALYSIS_FAILED, "판정에 실패했어요. 다시 시도해 주세요."
         ) from exc

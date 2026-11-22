@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from agents import (
     Agent,
-    MaxTurnsExceeded,
-    ModelBehaviorError,
     ModelSettings,
     RunContextWrapper,
     UserError,
@@ -32,6 +30,7 @@ from server.verify import VerificationError, verify_analysis
 MAX_TURNS = 6  # lookup_docs 최대 5 + 최종 출력 1 (parallel_tool_calls=False)
 RETRY_MAX_TURNS = 3
 RETRY_BUDGET_SECONDS = 20.0
+MAX_OUTPUT_TOKENS = 6000  # 단계·결정 지점 JSON이 잘리지 않을 만큼(BE-09 출력 토큰 상한)
 
 UNSUPPORTED_LOOKUP = (
     '{"status": "unsupported", "excerpt": "facts.calls에 있는 (module, symbol)만 조회할 수 있다."}'
@@ -61,7 +60,7 @@ def build_analyst(checked: CheckedCode, level: str) -> Agent[AnalystContext]:
         instructions=f"{ANALYST_PROMPT}\n{checked.adapter.prompt_hints(level)}",
         model=runtime.agent_model(settings),
         tools=[lookup_docs],
-        model_settings=ModelSettings(parallel_tool_calls=False),
+        model_settings=ModelSettings(parallel_tool_calls=False, max_tokens=MAX_OUTPUT_TOKENS),
         output_type=AnalysisDraft,
     )
 
@@ -73,12 +72,23 @@ async def run_analyst(
     ctx = AnalystContext(
         code=req.code, level=req.level, adapter=checked.adapter, facts=checked.facts
     )
+    stats = stats or RunStats()
+    attempts = 0
+
+    def verify(output: AnalysisDraft) -> AnalyzeResponse:
+        # 개수 규칙은 고칠 기회가 남았을 때만 건다.
+        # 재시도 예산을 넘겼거나 이미 고친 출력이면 모자라도 받는다.
+        nonlocal attempts
+        attempts += 1
+        can_retry = attempts == 1 and ctx.elapsed() <= RETRY_BUDGET_SECONDS
+        return verify_analysis(output, ctx, model_name, require_counts=can_retry)
+
     try:
         return await runtime.run_with_correction(
             build_analyst(checked, req.level),
             analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level),
-            lambda output: verify_analysis(output, ctx, model_name),
-            stats=stats or RunStats(),
+            verify,
+            stats=stats,
             context=ctx,
             max_turns=MAX_TURNS,
             retry_max_turns=RETRY_MAX_TURNS,
@@ -89,8 +99,10 @@ async def run_analyst(
         if not isinstance(exc.__cause__, ToolContractError):
             raise
         raise _analysis_failed() from exc
-    except (VerificationError, ToolContractError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except (VerificationError, ToolContractError) as exc:
         raise _analysis_failed() from exc
+    finally:
+        stats.tool_calls = len(ctx.calls)
 
 
 def _analysis_failed() -> ApiError:

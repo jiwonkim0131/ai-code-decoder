@@ -15,7 +15,13 @@ from server.docs.documentation import DocumentationEvidence
 from server.languages.python import PythonAdapter
 from tests.fakes import doc_evidence
 
-ENV_KEYS = ("OPENAI_API_KEY", "OPENAI_MODEL", "ALLOWED_LANGS", "ENABLE_DEV_ROUTES")
+ENV_KEYS = (
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "ALLOWED_LANGS",
+    "ENABLE_DEV_ROUTES",
+    "AGENT_TIMEOUT_SECONDS",
+)
 
 
 @pytest.fixture(autouse=True)

@@ -40,6 +40,7 @@ class RunStats:
 
     tokens: int = 0
     runs: int = 0
+    tool_calls: int = 0
 
     def add(self, result: Any) -> None:
         usage = getattr(getattr(result, "context_wrapper", None), "usage", None)

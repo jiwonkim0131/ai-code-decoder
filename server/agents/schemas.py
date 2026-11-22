@@ -60,15 +60,28 @@ class DraftDecisionPoint(_Draft):
     id: str = Field(description="dp1, dp2, ...")
     step_id: int = Field(description="이 결정이 일어나는 단계 id")
     lines: list[int]
-    prompt: str = Field(description='"너라면?" 질문. 정답을 암시하지 않는다')
+    prompt: str = Field(
+        description='"~하려면 어떤 방식이 적절할까요?" 형태의 설계 선택 질문. '
+        "정답을 암시하지 않는다"
+    )
     options: list[DraftOption] = Field(description="A~D 4개. 하나는 이 코드의 선택")
     code_option: OptionId = Field(description="이 코드가 실제로 택한 선택지")
     hint: str = Field(description="정답을 말하지 않고 생각할 방향만 주는 힌트")
     conditions: list[DraftCondition] = Field(description="결정을 가른 조건 2~4개")
 
 
+class DraftDecisionCandidate(_Draft):
+    topic: str = Field(description="무엇을 고른 결정인지(예: Semaphore로 동시 실행 수 제한)")
+    lines: list[int] = Field(description="그 결정이 드러나는 줄 번호들")
+
+
 class AnalysisDraft(_Draft):
     steps: list[DraftStep]
+    # decision_points보다 먼저 쓰게 해서 후보를 다 본 뒤 고르게 한다. 개수는 서버가 맞춰 본다.
+    decision_candidates: list[DraftDecisionCandidate] = Field(
+        description="결정 지점을 쓰기 전에, 다른 방식도 가능했던 설계 결정 후보를 "
+        "줄·관점별로 모두 나열"
+    )
     decision_points: list[DraftDecisionPoint]
 
 
@@ -77,6 +90,10 @@ class AnalysisDraft(_Draft):
 
 class DraftConditionVerdict(_Draft):
     id: str = Field(description="입력 조건의 id 그대로")
+    quote: str = Field(
+        description="<answer>에서 이 조건을 다룬 부분을 고치지 않고 그대로 옮긴 것. "
+        "결론이 이 코드와 반대여도 조건을 따졌으면 옮긴다. 없으면 빈 문자열"
+    )
     status: ConditionStatus | None = Field(
         description="hit(답이 이 조건을 짚음) 또는 miss. 건너뛰기(설명 모드)면 null"
     )
@@ -101,3 +118,72 @@ class JudgeDraft(_Draft):
     conditions: list[DraftConditionVerdict]
     code_choice: DraftCodeChoice
     tradeoffs: list[DraftTradeoffRow] = Field(description="선택지마다 한 행")
+
+
+# --- 코치(Coach) --------------------------------------------------------
+
+
+class DraftConstraint(_Draft):
+    # 근거(줄·심볼·가정·이유)를 이름보다 먼저 쓰게 해서, 코드에 걸 곳이 없는 제약을 만들지 않고
+    # 코드에 이미 있는 설정이 아니라 "바뀐 조건"을 쓰게 한다.
+    lines: list[int] = Field(description="이 제약이 걸리면 동작이 달라지는 줄 번호들")
+    symbol: str = Field(description="그 줄의 핵심 심볼. 코드에 실제로 적힌 이름")
+    assumption: str = Field(
+        description="이 코드가 그 줄에서 암묵적으로 가정한 운영 조건 한 문장"
+        "(예: call_tool은 1.5초 안에 응답한다)"
+    )
+    rationale: str = Field(
+        description="그 가정이 깨지면 그 줄이 왜 문제가 되거나 다시 설계해야 하는지 1~2문장"
+    )
+    id: str = Field(description="k1, k2, ...")
+    label: str = Field(
+        description="칩에 보일 버튼 이름. 무엇이 어떻게 바뀌는지 담은 20자 이내 명사구"
+    )
+    situation: str = Field(
+        description="가정이 어떻게 깨졌는지 보태는 한 문장. '~해요'로 끝내고 결과·정답은 쓰지 않음"
+    )
+
+
+class ConstraintsDraft(_Draft):
+    # 제약보다 먼저 쓰게 해서, 걸 곳이 없는 코드(단순 계산·변환)는 빈 목록으로 끝나게 한다.
+    operational_lines: list[int] = Field(
+        description="외부 호출(네트워크·API·DB·파일), 동시 실행, 재시도·타임아웃, 공유 자원 관리가 "
+        "실제로 있는 줄 번호들. 없으면 빈 목록"
+    )
+    constraints: list[DraftConstraint] = Field(
+        description="바꿔 볼 제약 0~5개. 코드에 실제로 걸 곳이 있을 때만. 없으면 빈 목록"
+    )
+
+
+class ScenarioDraft(_Draft):
+    question: str = Field(description="실패 주입 질문. 물음표는 끝에 하나만")
+    follow_up: str = Field(description="질문 아래 짧은 안내 한 문장(60자 이내). 어디를 볼지만")
+    hint: str = Field(
+        description="안내보다 구체적인 힌트 1~2문장. 볼 줄·호출과 비교할 것만 쓰고 "
+        "결과·정답은 쓰지 않음"
+    )
+
+
+class ModelAnswerDraft(_Draft):
+    answer: str = Field(description="질문의 모범 답변 3~5문장. 이 코드의 줄·호출을 들어 설명")
+
+
+class DraftTakeaway(_Draft):
+    text: str = Field(description="배운 점 한 문장. 이 코드의 심볼·줄을 들어 구체적으로")
+    refs: list[str] = Field(
+        description='근거가 된 기록의 ref 1개 이상. 입력에 적힌 ref(예: "step:2", '
+        '"decision:dp1", "apply:latency")만'
+    )
+
+
+class SummaryDraft(_Draft):
+    takeaways: list[DraftTakeaway] = Field(description="핵심 정리 3~5개. 중요한 순서로")
+    review_points: list[str] = Field(
+        description="다시 볼 것 0~3개. 미반영 판단 기준이나 피드백의 아쉬운 점에서만"
+    )
+
+
+class FeedbackDraft(_Draft):
+    verdict: str = Field(description="답 전체에 대한 한 줄 평")
+    points: list[str] = Field(description="잘한 점 0~3개. 답에 실제로 있는 내용만")
+    further: str = Field(description='"더 생각해 볼 것" 1~2문장')
