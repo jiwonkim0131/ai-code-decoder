@@ -22,6 +22,7 @@ def _decision_point(**overrides) -> dict:
         "lines": [9],
         "prompt": "너라면 tool 3개를 어떻게 실행할래요?",
         "options": [{"id": i, "label": f"option {i}"} for i in "ABCD"],
+        "codeOption": "B",
         "hint": "tool 하나가 실패하면?",
         "conditions": [
             {"id": "c1", "label": "전체 대기 시간", "explanation": "...", "splits": ["A", "B"]}
@@ -90,10 +91,10 @@ def test_validation_error_is_400_input_invalid_without_echoing_code(client):
 
 
 def test_unimplemented_route_uses_error_shape(client):
-    response = client.post("/api/analyze", json={"code": "x = 1"})
+    response = client.post("/api/scenario", json={"code": "x = 1", "preset": "latency"})
     assert response.status_code == 501
     assert response.json() == {
-        "error": {"code": "not_implemented", "message": "아직 구현되지 않았어요(BE-06)."}
+        "error": {"code": "not_implemented", "message": "아직 구현되지 않았어요(BE-08)."}
     }
 
 

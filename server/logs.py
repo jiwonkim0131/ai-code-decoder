@@ -33,11 +33,15 @@ def install_request_logging(app: FastAPI) -> None:
     @app.middleware("http")
     async def log_request(request: Request, call_next):
         started = time.perf_counter()
-        response = await call_next(request)
-        if request.url.path.startswith("/api/"):
-            log_event(
-                kind=f"{request.method} {request.url.path}",
-                status=response.status_code,
-                duration_ms=int((time.perf_counter() - started) * 1000),
-            )
-        return response
+        status = 500  # 처리되지 않은 예외도 한 줄 남긴다(500 응답은 바깥 미들웨어가 만든다)
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            if request.url.path.startswith("/api/"):
+                log_event(
+                    kind=f"{request.method} {request.url.path}",
+                    status=status,
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )

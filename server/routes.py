@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from server.agents.analyst import run_analyst
 from server.errors import ApiError, ErrorCode
 from server.intake import check_code
 from server.models import (
@@ -46,8 +47,16 @@ async def scan(req: ScanRequest) -> ScanResponse:
 @router.post("/analyze", response_model=AnalyzeResponse, tags=["analysis"])
 async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     """분석 에이전트를 실행해 단계·결정 지점·조건을 돌려준다."""
-    check_code(req.code, req.language)
-    raise _not_implemented("BE-06")
+    checked = check_code(req.code, req.language)
+    outside = [line for line in req.focus_lines if line > checked.facts.line_count]
+    if outside:
+        raise ApiError(
+            400,
+            ErrorCode.INPUT_INVALID,
+            f"궁금한 줄이 코드 범위를 벗어났어요(코드 {checked.facts.line_count}줄).",
+            fields=[{"field": "focusLines", "reason": "out_of_range"}],
+        )
+    return await run_analyst(req, checked)
 
 
 @router.post("/judge", response_model=Verdict, tags=["learning"])

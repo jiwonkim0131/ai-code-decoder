@@ -93,6 +93,9 @@ class DecisionPoint(ApiModel):
     lines: list[LineNumber] = Field(min_length=1)
     prompt: str
     options: list[Option] = Field(min_length=4, max_length=4)
+    code_option: OptionId = Field(
+        description="이 코드가 실제로 택한 선택지. 판정 화면의 '이 코드의 선택'"
+    )
     hint: str
     conditions: list[Condition] = Field(min_length=1)
 

@@ -5,10 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 
 import pytest
+from agents.testing import ScriptedModel
 from fastapi.testclient import TestClient
 
 import app as app_module
+from server.agents import runtime
 from server.config import get_settings
+from server.docs.documentation import DocumentationEvidence
+from server.languages.python import PythonAdapter
+from tests.fakes import doc_evidence
 
 ENV_KEYS = ("OPENAI_API_KEY", "OPENAI_MODEL", "ALLOWED_LANGS", "ENABLE_DEV_ROUTES")
 
@@ -38,3 +43,26 @@ def make_client(monkeypatch: pytest.MonkeyPatch) -> Callable[..., TestClient]:
 @pytest.fixture
 def client(make_client: Callable[..., TestClient]) -> TestClient:
     return make_client()
+
+
+@pytest.fixture(autouse=True)
+def scripted_model(monkeypatch: pytest.MonkeyPatch) -> ScriptedModel:
+    """에이전트 모델을 대본 모델로 바꾼다. 대본이 비어 있으면 모델 호출 자체가 실패한다.
+
+    테스트는 `scripted_model.extend([...])`로 모델 응답(도구 호출, 최종 출력)을 차례로 넣는다.
+    """
+    model = ScriptedModel()
+    monkeypatch.setattr(runtime, "agent_model", lambda settings: model)
+    return model
+
+
+@pytest.fixture
+def docs(monkeypatch: pytest.MonkeyPatch) -> dict[tuple[str, str], DocumentationEvidence]:
+    """문서 조회를 네트워크 없이 돌린다. 등록하지 않은 (module, symbol)은 page_only."""
+    table: dict[tuple[str, str], DocumentationEvidence] = {}
+
+    def lookup(self, module: str, symbol: str) -> DocumentationEvidence:
+        return table.get((module, symbol)) or doc_evidence(module, symbol, "page_only")
+
+    monkeypatch.setattr(PythonAdapter, "lookup_docs", lookup)
+    return table
