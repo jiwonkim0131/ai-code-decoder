@@ -61,13 +61,15 @@ Vercel이 루트의 `app.py`에서 FastAPI `app`을 찾는다. `vercel link` →
 ## 골든 샘플 평가 (BE-10)
 
 `evals/golden/cases.jsonl` 한 줄이 케이스 하나다. 분석 대상 코드는 `evals/golden/samples/`에 있고,
-평가는 FE와 같은 순서(analyze → judge → scenario → feedback)로 API를 불러 `evals/golden/checks.py`의 규칙으로 본다.
+평가는 FE와 같은 순서(analyze → judge → constraints → scenario → feedback)로 API를 불러 `evals/golden/checks.py`의 규칙으로 본다.
+설계 응용의 제약은 코드마다 모델이 고르므로, 케이스는 제약 수 범위와 "이런 축의 제약이 하나는 있는가"(라벨 키워드)만 본다.
 
 | 케이스 | 보는 것 |
 | --- | --- |
-| `agent-tools` | 목업 사례. 9번째 줄 asyncio.gather 결정 지점, gather 공식 문서 배지, 판정 방향(조건을 짚은 답 / 이유 없는 답 / 건너뛰기), "tool 하나 3초 지연" |
-| `fetch-users` | 서드파티 패키지(requests) 공식 문서 배지, 재시도 결정 지점, "rate limit 분당 60회" |
+| `agent-tools` | 목업 사례. 9번째 줄 asyncio.gather 결정 지점, gather 공식 문서 배지, 판정 방향(조건을 짚은 답 / 이유 없는 답 / 건너뛰기), 지연 제약과 그 질문 |
+| `fetch-users` | 서드파티 패키지(requests) 공식 문서 배지, 재시도 결정 지점, 호출 한도·응답 지연 제약과 그 질문 |
 | `prompt-injection` | 주석 속 가짜 SYSTEM 지시에 넘어가지 않는지(단계 수, 줄 번호, 배지) |
+| `order-total` | 외부 호출·동시성이 없는 단순 계산 코드라 제약이 0개(설계 응용을 건너뜀) |
 
 프롬프트를 고칠 때마다 돌려 회귀를 확인한다. 검사 규칙 자체의 테스트(`tests/test_golden.py`)는 OpenAI 없이 돈다.
 

@@ -12,7 +12,9 @@ export type Verdict = S["Verdict"];
 export type JudgeRequest = S["JudgeRequest"];
 export type ScenarioResponse = S["ScenarioResponse"];
 export type FeedbackResponse = S["FeedbackResponse"];
-export type Preset = ScenarioResponse["preset"];
+export type SummaryRequest = S["SummaryRequest"];
+export type SummaryResponse = S["SummaryResponse"];
+export type Constraint = S["Constraint"];
 export type Level = NonNullable<AnalyzeRequest["level"]>;
 export type OptionId = DecisionPoint["codeOption"];
 
@@ -50,14 +52,67 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+// 같은 입력이면 같은 질문·모범 답변을 다시 써도 되므로 브라우저에 오래 둔다(새로고침·처음으로 돌아가도 유지).
+// 저장소를 못 쓰는 환경(시크릿 창 등)에서는 캐시 없이 그냥 요청한다.
+const CACHE_PREFIX = "api-cache:";
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function cacheKey(path: string, body: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(path + JSON.stringify(body));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return CACHE_PREFIX + hex;
+}
+
+function pruneExpired(now: number) {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith(CACHE_PREFIX)) continue;
+    try {
+      if (JSON.parse(localStorage.getItem(key) ?? "null")?.expires > now) continue;
+    } catch {
+      // 깨진 항목은 지운다
+    }
+    localStorage.removeItem(key);
+  }
+}
+
+async function cachedPost<T>(path: string, body: unknown): Promise<T> {
+  let key: string | null = null;
+  try {
+    key = await cacheKey(path, body);
+    const hit = JSON.parse(localStorage.getItem(key) ?? "null");
+    if (hit && hit.expires > Date.now()) return hit.data as T;
+  } catch {
+    // 캐시를 못 읽으면 요청으로 넘어간다
+  }
+  const data = await post<T>(path, body);
+  if (key) {
+    try {
+      const now = Date.now();
+      pruneExpired(now);
+      localStorage.setItem(key, JSON.stringify({ expires: now + CACHE_TTL_MS, data }));
+    } catch {
+      // 용량 초과 등은 무시한다
+    }
+  }
+  return data;
+}
+
 export const api = {
   scan: (code: string) => post<S["ScanResponse"]>("/api/scan", { code }),
   analyze: (body: AnalyzeRequest) => post<AnalyzeResponse>("/api/analyze", body),
   judge: (body: JudgeRequest) => post<Verdict>("/api/judge", body),
-  scenario: (code: string, preset: Preset, steps: Step[]) =>
-    post<ScenarioResponse>("/api/scenario", { code, preset, steps }),
-  feedback: (code: string, preset: Preset, question: string, answer: string) =>
-    post<FeedbackResponse>("/api/feedback", { code, preset, question, answer }),
+  constraints: (code: string, steps: Step[]) =>
+    cachedPost<S["ConstraintsResponse"]>("/api/constraints", { code, steps }),
+  scenario: (code: string, constraint: Constraint, steps: Step[]) =>
+    cachedPost<ScenarioResponse>("/api/scenario", { code, constraint, steps }),
+  feedback: (code: string, constraint: Constraint, question: string, answer: string) =>
+    post<FeedbackResponse>("/api/feedback", { code, constraint, question, answer }),
+  modelAnswer: (code: string, constraint: Constraint, question: string) =>
+    cachedPost<S["ModelAnswerResponse"]>("/api/model-answer", { code, constraint, question }),
+  // 같은 학습 기록이면 같은 정리를 쓴다(기록이 바뀌면 키가 달라져 새로 만든다).
+  summary: (body: SummaryRequest) => cachedPost<SummaryResponse>("/api/summary", body),
 };
 
 export const MAX_CODE_CHARACTERS = 20_000;

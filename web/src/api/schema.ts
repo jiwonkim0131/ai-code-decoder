@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/constraints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Constraints
+         * @description 설계 응용에서 바꿔 볼 제약을 코드에 맞춰 고른다. 분석이 끝난 뒤 따로 부른다.
+         */
+        post: operations["constraints_api_constraints_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scenario": {
         parameters: {
             query?: never;
@@ -92,9 +112,29 @@ export interface paths {
         put?: never;
         /**
          * Scenario
-         * @description 제약 프리셋에 맞는 실패 주입 질문을 만든다.
+         * @description 분석이 고른 제약에 맞는 실패 주입 질문을 만든다.
          */
         post: operations["scenario_api_scenario_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/model-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Model Answer
+         * @description 실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다.
+         */
+        post: operations["model_answer_api_model_answer_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -115,6 +155,26 @@ export interface paths {
          * @description 실패 주입 질문에 대한 답을 평가한다.
          */
         post: operations["feedback_api_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Summary
+         * @description 1~5단계 학습 기록으로 핵심 정리를 만든다. 코드는 받지 않는다(기록에 줄·심볼이 있음).
+         */
+        post: operations["summary_api_summary_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -200,6 +260,58 @@ export interface components {
             note: string;
         };
         /**
+         * Constraint
+         * @description 설계 응용에서 바꿔 볼 제약 1개. 코드에 맞춰 만들고, 걸 곳이 없으면 만들지 않는다.
+         *
+         *     assumption·rationale은 정답에 가까워 화면에 보이지 않고 코치 입력에만 쓴다.
+         */
+        Constraint: {
+            /** Id */
+            id: string;
+            /**
+             * Label
+             * @description 칩 문구(짧게)
+             */
+            label: string;
+            /**
+             * Situation
+             * @description 바뀐 상황 설명. 화면에 보인다
+             */
+            situation: string;
+            /** Lines */
+            lines: number[];
+            /**
+             * Symbol
+             * @description 이 제약이 걸리는 코드의 심볼
+             */
+            symbol: string;
+            /**
+             * Assumption
+             * @description 이 코드가 가정한 운영 조건(이 제약이 깨는 것)
+             */
+            assumption: string;
+            /** Rationale */
+            rationale: string;
+        };
+        /**
+         * ConstraintsRequest
+         * @description 분석이 끝난 뒤 따로 부른다. 실패해도 분석 결과는 그대로 쓴다(설계 응용만 건너뜀).
+         */
+        ConstraintsRequest: {
+            /** Code */
+            code: string;
+            /** Steps */
+            steps?: components["schemas"]["Step"][];
+        };
+        /** ConstraintsResponse */
+        ConstraintsResponse: {
+            /**
+             * Constraints
+             * @description 비어 있으면 설계 응용 단계를 건너뛴다
+             */
+            constraints: components["schemas"]["Constraint"][];
+        };
+        /**
          * DecisionPoint
          * @description 결정 지점 1개 = "너라면?" 1문제.
          */
@@ -261,11 +373,7 @@ export interface components {
         FeedbackRequest: {
             /** Code */
             code: string;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Question */
             question: string;
             /** Answer */
@@ -298,6 +406,19 @@ export interface components {
              * @enum {string}
              */
             level?: "basic" | "work" | "deep";
+        };
+        /** ModelAnswerRequest */
+        ModelAnswerRequest: {
+            /** Code */
+            code: string;
+            constraint: components["schemas"]["Constraint"];
+            /** Question */
+            question: string;
+        };
+        /** ModelAnswerResponse */
+        ModelAnswerResponse: {
+            /** Answer */
+            answer: string;
         };
         /** MyAnswer */
         MyAnswer: {
@@ -335,25 +456,23 @@ export interface components {
         ScenarioRequest: {
             /** Code */
             code: string;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Steps */
             steps?: components["schemas"]["Step"][];
         };
         /** ScenarioResponse */
         ScenarioResponse: {
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            /** Constraintid */
+            constraintId: string;
             /** Question */
             question: string;
             /** Followup */
             followUp: string;
+            /**
+             * Hint
+             * @description 답을 말하지 않고 생각할 방향만 주는 힌트
+             */
+            hint: string;
         };
         /**
          * SecretFinding
@@ -401,6 +520,65 @@ export interface components {
             in: string;
             /** Out */
             out: string;
+        };
+        /**
+         * SummaryApplication
+         * @description 설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다.
+         */
+        SummaryApplication: {
+            constraint: components["schemas"]["Constraint"];
+            /** Question */
+            question: string;
+            /**
+             * Answer
+             * @default
+             */
+            answer?: string;
+            feedback?: components["schemas"]["FeedbackResponse"] | null;
+            /** Modelanswer */
+            modelAnswer?: string | null;
+        };
+        /**
+         * SummaryDecision
+         * @description 설계 선택·비교 한 건. 판정 화면에 쓴 그대로 다시 보낸다.
+         */
+        SummaryDecision: {
+            decisionPoint: components["schemas"]["DecisionPoint"];
+            verdict: components["schemas"]["Verdict"];
+        };
+        /**
+         * SummaryRequest
+         * @description 학습 정리. 서버가 학습 기록을 기억하지 않으므로 FE가 1~5단계 결과를 모아 보낸다.
+         *
+         *     코드는 보내지 않는다(단계·결정 지점에 줄과 심볼이 있다).
+         */
+        SummaryRequest: {
+            /** Steps */
+            steps: components["schemas"]["Step"][];
+            /** Decisions */
+            decisions?: components["schemas"]["SummaryDecision"][];
+            /** Applications */
+            applications?: components["schemas"]["SummaryApplication"][];
+        };
+        /** SummaryResponse */
+        SummaryResponse: {
+            /** Takeaways */
+            takeaways: components["schemas"]["Takeaway"][];
+            /**
+             * Reviewpoints
+             * @description 다시 볼 것(놓친 판단 기준, 더 생각해 볼 점)
+             */
+            reviewPoints: string[];
+        };
+        /** Takeaway */
+        Takeaway: {
+            /** Text */
+            text: string;
+            /**
+             * Refs
+             * @description 근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<constraint id>"
+             */
+            refs: string[];
         };
         /**
          * ToolCall
@@ -691,6 +869,75 @@ export interface operations {
             };
         };
     };
+    constraints_api_constraints_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstraintsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstraintsResponse"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     scenario_api_scenario_post: {
         parameters: {
             query?: never;
@@ -760,6 +1007,75 @@ export interface operations {
             };
         };
     };
+    model_answer_api_model_answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelAnswerResponse"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     feedback_api_feedback_post: {
         parameters: {
             query?: never;
@@ -780,6 +1096,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    summary_api_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SummaryResponse"];
                 };
             };
             /** @description 입력 오류 */

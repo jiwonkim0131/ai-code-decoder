@@ -73,11 +73,21 @@ async def run_analyst(
         code=req.code, level=req.level, adapter=checked.adapter, facts=checked.facts
     )
     stats = stats or RunStats()
+    attempts = 0
+
+    def verify(output: AnalysisDraft) -> AnalyzeResponse:
+        # 개수 규칙은 고칠 기회가 남았을 때만 건다.
+        # 재시도 예산을 넘겼거나 이미 고친 출력이면 모자라도 받는다.
+        nonlocal attempts
+        attempts += 1
+        can_retry = attempts == 1 and ctx.elapsed() <= RETRY_BUDGET_SECONDS
+        return verify_analysis(output, ctx, model_name, require_counts=can_retry)
+
     try:
         return await runtime.run_with_correction(
             build_analyst(checked, req.level),
             analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level),
-            lambda output: verify_analysis(output, ctx, model_name),
+            verify,
             stats=stats,
             context=ctx,
             max_turns=MAX_TURNS,

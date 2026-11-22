@@ -8,22 +8,35 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from server.agents.analyst import run_analyst
-from server.agents.coach import run_feedback, run_scenario
+from server.agents.coach import (
+    run_constraints,
+    run_feedback,
+    run_model_answer,
+    run_scenario,
+    run_summary,
+)
 from server.agents.guard import agent_call
 from server.agents.judge import run_judge
 from server.errors import ApiError, ErrorCode
-from server.intake import check_code
+from server.intake import CheckedCode, check_code
 from server.models import (
     AnalyzeRequest,
     AnalyzeResponse,
+    Constraint,
+    ConstraintsRequest,
+    ConstraintsResponse,
     ErrorResponse,
     FeedbackRequest,
     FeedbackResponse,
     JudgeRequest,
+    ModelAnswerRequest,
+    ModelAnswerResponse,
     ScanRequest,
     ScanResponse,
     ScenarioRequest,
     ScenarioResponse,
+    SummaryRequest,
+    SummaryResponse,
     Verdict,
 )
 from server.secrets import scan_secrets
@@ -37,6 +50,17 @@ ERROR_RESPONSES = {
 }
 
 router = APIRouter(prefix="/api", responses=ERROR_RESPONSES)
+
+
+def _check_constraint(constraint: Constraint, checked: CheckedCode) -> None:
+    """제약은 FE가 analyze 응답에서 받아 다시 보낸 값이라, 이 코드의 줄을 가리키는지 다시 본다."""
+    if any(line > checked.facts.line_count for line in constraint.lines):
+        raise ApiError(
+            400,
+            ErrorCode.INPUT_INVALID,
+            f"제약이 코드 범위를 벗어났어요(코드 {checked.facts.line_count}줄).",
+            fields=[{"field": "constraint.lines", "reason": "out_of_range"}],
+        )
 
 
 @router.post("/scan", response_model=ScanResponse, tags=["analysis"])
@@ -68,17 +92,43 @@ async def judge(req: JudgeRequest) -> Verdict:
         return await run_judge(req, stats)
 
 
+@router.post("/constraints", response_model=ConstraintsResponse, tags=["learning"])
+async def constraints(req: ConstraintsRequest) -> ConstraintsResponse:
+    """설계 응용에서 바꿔 볼 제약을 코드에 맞춰 고른다. 분석이 끝난 뒤 따로 부른다."""
+    checked = check_code(req.code)
+    async with agent_call("constraints", checked.facts.line_count) as stats:
+        return await run_constraints(req, checked, stats)
+
+
 @router.post("/scenario", response_model=ScenarioResponse, tags=["learning"])
 async def scenario(req: ScenarioRequest) -> ScenarioResponse:
-    """제약 프리셋에 맞는 실패 주입 질문을 만든다."""
+    """분석이 고른 제약에 맞는 실패 주입 질문을 만든다."""
     checked = check_code(req.code)
+    _check_constraint(req.constraint, checked)
     async with agent_call("scenario", checked.facts.line_count) as stats:
         return await run_scenario(req, checked, stats)
+
+
+@router.post("/model-answer", response_model=ModelAnswerResponse, tags=["learning"])
+async def model_answer(req: ModelAnswerRequest) -> ModelAnswerResponse:
+    """실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다."""
+    checked = check_code(req.code)
+    _check_constraint(req.constraint, checked)
+    async with agent_call("model_answer", checked.facts.line_count) as stats:
+        return await run_model_answer(req, checked, stats)
 
 
 @router.post("/feedback", response_model=FeedbackResponse, tags=["learning"])
 async def feedback(req: FeedbackRequest) -> FeedbackResponse:
     """실패 주입 질문에 대한 답을 평가한다."""
     checked = check_code(req.code)
+    _check_constraint(req.constraint, checked)
     async with agent_call("feedback", checked.facts.line_count) as stats:
         return await run_feedback(req, checked, stats)
+
+
+@router.post("/summary", response_model=SummaryResponse, tags=["learning"])
+async def summary(req: SummaryRequest) -> SummaryResponse:
+    """1~5단계 학습 기록으로 핵심 정리를 만든다. 코드는 받지 않는다(기록에 줄·심볼이 있음)."""
+    async with agent_call("summary") as stats:
+        return await run_summary(req, stats)
