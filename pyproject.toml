@@ -39,3 +39,5 @@ known-first-party = ["server"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["T20"]
+# 프롬프트 문장은 줄을 나누면 읽기 어려워 길이 제한에서 뺀다.
+"server/agents/prompts.py" = ["E501"]
