@@ -29,7 +29,8 @@ addopts = "-q"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-extend-exclude = [".venv", "node_modules", "dist"]
+# 골든 샘플은 분석 대상 코드(데이터)라 린트하지 않는다.
+extend-exclude = [".venv", "node_modules", "dist", "evals/golden/samples"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "T20", "N"]
@@ -39,5 +40,6 @@ known-first-party = ["server"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["T20"]
+"evals/golden/__main__.py" = ["T20"]
 # 프롬프트 문장은 줄을 나누면 읽기 어려워 길이 제한에서 뺀다.
 "server/agents/prompts.py" = ["E501"]

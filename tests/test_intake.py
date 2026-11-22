@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from server.secrets import REDACTED
-from tests.fakes import final
+from tests.fakes import constraint, final
 
 OPENAI_KEY = "sk-" + "proj-" + "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7"
 CODE_WITH_KEY = f'import os\n\nclient_key = "{OPENAI_KEY}"\n'
@@ -33,8 +33,8 @@ def test_scan_after_redaction_is_clean(client):
     "path,extra",
     [
         ("/api/analyze", {}),
-        ("/api/scenario", {"preset": "latency"}),
-        ("/api/feedback", {"preset": "latency", "question": "q?", "answer": "a"}),
+        ("/api/scenario", {"constraint": constraint(lines=[1])}),
+        ("/api/feedback", {"constraint": constraint(lines=[1]), "question": "q?", "answer": "a"}),
     ],
 )
 def test_llm_endpoints_reject_code_with_secrets(client, path, extra):
@@ -80,10 +80,19 @@ def test_allowed_langs_can_turn_python_off(make_client):
 
 def test_valid_code_passes_intake_and_reaches_the_model(client, scripted_model):
     scripted_model.extend(
-        [final({"question": "어떻게 될까요?", "follow_up": "9번째 줄을 보세요."})]
+        [
+            final(
+                {
+                    "question": "어떻게 될까요?",
+                    "follow_up": "9번째 줄을 보세요.",
+                    "hint": "힌트",
+                }
+            )
+        ]
     )
     code = "import asyncio\nasyncio.run(main())\n"
-    response = client.post("/api/scenario", json={"code": code, "preset": "latency"})
+    body = {"code": code, "constraint": constraint(lines=[2])}
+    response = client.post("/api/scenario", json=body)
     assert response.status_code == 200
     assert len(scripted_model.calls) == 1
 
