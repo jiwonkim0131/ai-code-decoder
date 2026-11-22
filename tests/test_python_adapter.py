@@ -169,3 +169,22 @@ def test_get_adapter_respects_allowed_langs(monkeypatch):
     with pytest.raises(LanguageUnsupportedError) as exc_info:
         get_adapter("python")
     assert exc_info.value.supported == []
+
+
+@pytest.mark.parametrize(
+    "code,expected",
+    [
+        # 외부 호출·동시성·대기가 있는 줄만 남는다(모르는 패키지도 외부 호출로 본다).
+        (
+            "import asyncio\nimport tools\nasync def f(xs):\n    await asyncio.gather(*xs)\n"
+            "    return tools.call(len(xs))\n",
+            {4, 5},
+        ),
+        ("import requests, time\nr = requests.get('u', timeout=5)\ntime.sleep(1)\n", {2, 3}),
+        # 계산·변환·설정 읽기뿐이면 비어 있다(설계 응용을 건너뛴다).
+        ("def total(items):\n    return round(sum(items), 2)\n", set()),
+        ("import json\nwith open('c.json') as f:\n    c = json.load(f)\n", set()),
+    ],
+)
+def test_operational_lines(adapter, code, expected):
+    assert adapter.operational_lines(adapter.extract_facts(code)) == expected

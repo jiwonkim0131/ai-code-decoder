@@ -104,3 +104,10 @@ class LanguageAdapter(Protocol):
     def prompt_hints(self, level: AudienceLevel) -> str:
         """언어 관용구와 설명 수준별 문체를 프롬프트에 덧붙일 문장으로 돌려준다."""
         ...
+
+    def operational_lines(self, facts: StaticFacts) -> set[int] | None:
+        """외부 호출·동시성·대기처럼 운영 조건에 따라 동작이 달라지는 호출이 있는 줄.
+
+        설계 응용의 제약은 이 줄에만 걸 수 있고, 비어 있으면 제약을 만들지 않는다(단계 건너뜀).
+        정적 분석으로 가를 수 없는 언어는 None을 돌려주고, 그때는 모델이 고른 줄을 쓴다."""
+        ...

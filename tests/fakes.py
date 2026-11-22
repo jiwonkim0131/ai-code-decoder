@@ -89,6 +89,30 @@ def decision_point(**overrides: Any) -> dict:
     return data
 
 
+def constraint(**overrides: Any) -> dict:
+    """제약 모델이 내는 제약 하나(snake_case와 API camelCase가 같은 모양이다)."""
+    data = {
+        "lines": [9],
+        "symbol": "asyncio.gather",
+        "assumption": "call_tool은 모두 금방 응답한다.",
+        "rationale": "gather는 모든 tool이 끝날 때까지 기다리므로 느린 tool 하나가 전체를 늦춰요.",
+        "id": "k1",
+        "label": "call_tool 응답 3초 지연",
+        "situation": "plan_tools가 고른 tool 중 하나가 매번 3초 뒤에야 응답해요.",
+    }
+    data.update(overrides)
+    return data
+
+
+def constraints_draft(*constraints: dict, operational: list[int] | None = None) -> dict:
+    """제약 모델의 최종 출력. operational_lines는 따로 주지 않으면 제약이 건 줄로 맞춘다."""
+    lines = sorted({line for c in constraints for line in c["lines"]})
+    return {
+        "operational_lines": operational if operational is not None else lines,
+        "constraints": list(constraints),
+    }
+
+
 def analysis_draft(**overrides: Any) -> dict:
     data = {
         "steps": [

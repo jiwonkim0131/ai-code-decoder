@@ -1,4 +1,5 @@
-"""코치 `POST /api/scenario`, `/api/feedback`, `/api/model-answer`, `/api/summary`(BE-08).
+"""코치 `POST /api/constraints`, `/api/scenario`, `/api/feedback`, `/api/model-answer`,
+`/api/summary`(BE-08).
 
 도구 없는 구조화 호출(Coach)이다. 코드를 받으므로 라우트에서 analyze와 같은 입구 검사(허용 언어,
 비밀값, 정적 분석)를 거치고, 서버가 사실 목록을 기억하지 않으니 요청마다 다시 만든다.
@@ -7,7 +8,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import Any
 
@@ -18,18 +18,29 @@ from server.agents.prompts import (
     COACH_FEEDBACK_PROMPT,
     COACH_MODEL_ANSWER_PROMPT,
     COACH_SCENARIO_PROMPT,
+    CONSTRAINTS_PROMPT,
     SUMMARY_PROMPT,
+    constraints_input,
     feedback_input,
     model_answer_input,
     scenario_input,
     summary_input,
 )
 from server.agents.runtime import RunStats
-from server.agents.schemas import FeedbackDraft, ModelAnswerDraft, ScenarioDraft, SummaryDraft
+from server.agents.schemas import (
+    ConstraintsDraft,
+    FeedbackDraft,
+    ModelAnswerDraft,
+    ScenarioDraft,
+    SummaryDraft,
+)
 from server.config import get_settings
 from server.errors import ApiError, ErrorCode
 from server.intake import CheckedCode
 from server.models import (
+    Constraint,
+    ConstraintsRequest,
+    ConstraintsResponse,
     FeedbackRequest,
     FeedbackResponse,
     ModelAnswerRequest,
@@ -40,38 +51,33 @@ from server.models import (
     SummaryResponse,
     Takeaway,
 )
-from server.verify import VerificationError
+from server.verify import FORMAL_ENDING, VerificationError, sentence_count, verify_constraints
 
 MAX_TURNS = 1
 FOLLOW_UP_MAX_CHARACTERS = 60
 HINT_MAX_SENTENCES = 2
 MODEL_ANSWER_SENTENCES = (3, 5)
-_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")  # 1.5 같은 숫자의 점은 세지 않는다
-# 합니다·됩니다·습니다·입니다처럼 '~니다/~니까'로 끝나는 문장(하십시오체)
-_FORMAL_ENDING = re.compile(r"니(다|까)[.!?]?(?=\s|$)")
 MAX_OUTPUT_TOKENS = 1000
+CONSTRAINTS_MAX_OUTPUT_TOKENS = 2000  # 제약 5개(필드 7개씩)가 잘리지 않을 만큼
 MAX_POINTS = 3
 TAKEAWAYS = (3, 5)
 MAX_REVIEW_POINTS = 3
 
 
-def _agent(name: str, instructions: str, output_type: type) -> Agent[None]:
+def _agent(
+    name: str, instructions: str, output_type: type, max_tokens: int = MAX_OUTPUT_TOKENS
+) -> Agent[None]:
     return Agent(
         name=name,
         instructions=instructions,
         model=runtime.agent_model(get_settings()),
-        model_settings=ModelSettings(max_tokens=MAX_OUTPUT_TOKENS),
+        model_settings=ModelSettings(max_tokens=max_tokens),
         output_type=output_type,
     )
 
 
-def _sentence_count(text: str) -> int:
-    text = text.strip()
-    return len(_SENTENCE_END.findall(text)) or (1 if text else 0)
-
-
 def _style_errors(field: str, text: str) -> list[str]:
-    if _FORMAL_ENDING.search(text):
+    if FORMAL_ENDING.search(text):
         return [f"{field}에 '~습니다' 말투가 있습니다. '~해요' 말투로 바꾸세요."]
     return []
 
@@ -89,7 +95,7 @@ def _style_on_first_try[T](verify: Callable[..., T]) -> Callable[[Any], T]:
 
 
 def verify_scenario(
-    draft: ScenarioDraft, preset: str, check_style: bool = True
+    draft: ScenarioDraft, constraint: Constraint, check_style: bool = True
 ) -> ScenarioResponse:
     question = draft.question.strip()
     errors: list[str] = []
@@ -98,27 +104,33 @@ def verify_scenario(
             f"question은 물음표가 문장 끝에 하나만 있는 질문 하나여야 합니다"
             f"(현재 물음표 {question.count('?')}개)."
         )
+    # 제약 이름과 상황 설명은 질문 위에 이미 보이므로 질문이 그대로 되풀이하지 않게 한다.
+    if constraint.situation.strip().rstrip(".") in question:
+        errors.append(
+            "question이 상황 설명(situation)을 그대로 옮겼습니다. 상황은 화면에 따로 보이니 "
+            "그 상황에서 코드의 줄·호출이 어떻게 될지만 물으세요."
+        )
     for field in ("follow_up", "hint"):
         if not getattr(draft, field).strip():
             errors.append(f"{field}이 비어 있습니다.")
     if check_style:
         follow_up, hint = draft.follow_up.strip(), draft.hint.strip()
-        if _sentence_count(follow_up) > 1 or len(follow_up) > FOLLOW_UP_MAX_CHARACTERS:
+        if sentence_count(follow_up) > 1 or len(follow_up) > FOLLOW_UP_MAX_CHARACTERS:
             errors.append(
                 f"follow_up은 {FOLLOW_UP_MAX_CHARACTERS}자 이내 한 문장이어야 합니다"
-                f"(현재 {_sentence_count(follow_up)}문장, {len(follow_up)}자)."
+                f"(현재 {sentence_count(follow_up)}문장, {len(follow_up)}자)."
             )
-        if _sentence_count(hint) > HINT_MAX_SENTENCES:
+        if sentence_count(hint) > HINT_MAX_SENTENCES:
             errors.append(
                 f"hint는 {HINT_MAX_SENTENCES}문장 이하여야 합니다"
-                f"(현재 {_sentence_count(hint)}문장). "
+                f"(현재 {sentence_count(hint)}문장). "
                 "볼 줄·호출과 비교할 것만 남기고 결과·정답은 빼세요."
             )
         errors += _style_errors("follow_up", follow_up) + _style_errors("hint", hint)
     if errors:
         raise VerificationError(errors)
     return ScenarioResponse(
-        preset=preset,
+        constraint_id=constraint.id,
         question=question,
         follow_up=draft.follow_up.strip(),
         hint=draft.hint.strip(),
@@ -132,9 +144,9 @@ def verify_model_answer(draft: ModelAnswerDraft, check_style: bool = True) -> Mo
     errors: list[str] = []
     if check_style:
         low, high = MODEL_ANSWER_SENTENCES
-        if not low <= _sentence_count(answer) <= high:
+        if not low <= sentence_count(answer) <= high:
             errors.append(
-                f"answer는 {low}~{high}문장이어야 합니다(현재 {_sentence_count(answer)}문장)."
+                f"answer는 {low}~{high}문장이어야 합니다(현재 {sentence_count(answer)}문장)."
             )
         errors += _style_errors("answer", answer)
     if errors:
@@ -162,7 +174,7 @@ def summary_refs(req: SummaryRequest) -> set[str]:
     return (
         {f"step:{step.id}" for step in req.steps}
         | {f"decision:{item.decision_point.id}" for item in req.decisions}
-        | {f"apply:{item.preset}" for item in req.applications}
+        | {f"apply:{item.constraint.id}" for item in req.applications}
     )
 
 
@@ -211,15 +223,40 @@ def _coach_failed() -> ApiError:
     )
 
 
+async def run_constraints(
+    req: ConstraintsRequest, checked: CheckedCode, stats: RunStats | None = None
+) -> ConstraintsResponse:
+    # 외부 호출·동시성이 없는 코드(단순 계산·변환)는 모델을 부르지 않고 설계 응용을 건너뛰게 한다.
+    if checked.adapter.operational_lines(checked.facts) == set():
+        return ConstraintsResponse(constraints=[])
+    # 고친 출력은 검증 오류로 실패시키지 않으므로(통과하지 못한 제약만 뺌) 여기서 502가 나는 것은
+    # 모델 호출 자체가 실패했을 때뿐이다.
+    return await runtime.run_with_correction(
+        _agent(
+            "CoachConstraints",
+            CONSTRAINTS_PROMPT,
+            ConstraintsDraft,
+            max_tokens=CONSTRAINTS_MAX_OUTPUT_TOKENS,
+        ),
+        constraints_input(req.code, checked.facts, req.steps),
+        _style_on_first_try(
+            lambda output, check_style: verify_constraints(output, checked, req.code, check_style)
+        ),
+        stats=stats or RunStats(),
+        max_turns=MAX_TURNS,
+        retry_max_turns=MAX_TURNS,
+    )
+
+
 async def run_scenario(
     req: ScenarioRequest, checked: CheckedCode, stats: RunStats | None = None
 ) -> ScenarioResponse:
     try:
         return await runtime.run_with_correction(
             _agent("CoachScenario", COACH_SCENARIO_PROMPT, ScenarioDraft),
-            scenario_input(req.code, checked.facts, req.preset, req.steps),
+            scenario_input(req.code, checked.facts, req.constraint, req.steps),
             _style_on_first_try(
-                lambda output, check_style: verify_scenario(output, req.preset, check_style)
+                lambda output, check_style: verify_scenario(output, req.constraint, check_style)
             ),
             stats=stats or RunStats(),
             max_turns=MAX_TURNS,
@@ -235,7 +272,7 @@ async def run_model_answer(
     try:
         return await runtime.run_with_correction(
             _agent("CoachModelAnswer", COACH_MODEL_ANSWER_PROMPT, ModelAnswerDraft),
-            model_answer_input(req.code, checked.facts, req.preset, req.question),
+            model_answer_input(req.code, checked.facts, req.constraint, req.question),
             _style_on_first_try(verify_model_answer),
             stats=stats or RunStats(),
             max_turns=MAX_TURNS,
@@ -251,7 +288,7 @@ async def run_feedback(
     try:
         return await runtime.run_with_correction(
             _agent("CoachFeedback", COACH_FEEDBACK_PROMPT, FeedbackDraft),
-            feedback_input(req.code, checked.facts, req.preset, req.question, req.answer),
+            feedback_input(req.code, checked.facts, req.constraint, req.question, req.answer),
             verify_feedback,
             stats=stats or RunStats(),
             max_turns=MAX_TURNS,

@@ -13,14 +13,14 @@ from agents.testing import ModelStep
 
 from server.agents import analyst, coach, judge, runtime
 from server.limits import MAX_BODY_BYTES
-from tests.fakes import AGENT_TOOLS, final
+from tests.fakes import AGENT_TOOLS, constraint, final
 
 SCENARIO = {
     "question": "어떻게 될까요?",
     "follow_up": "9번째 줄을 보세요.",
     "hint": "힌트",
 }
-SCENARIO_BODY = {"code": AGENT_TOOLS, "preset": "latency"}
+SCENARIO_BODY = {"code": AGENT_TOOLS, "constraint": constraint()}
 
 
 def _status_error(cls, status: int, code: str | None = None):
