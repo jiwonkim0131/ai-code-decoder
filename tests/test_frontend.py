@@ -50,3 +50,17 @@ def test_no_dist_means_no_frontend(tmp_path):
 def test_unknown_api_post_stays_404(tmp_path):
     response = _client(tmp_path).post("/api/dev/agent-ping")
     assert response.status_code == 404
+
+
+def test_index_is_revalidated_and_assets_are_immutable(tmp_path):
+    client = _client(tmp_path)
+    assert client.get("/").headers["cache-control"] == "no-cache"
+    assert client.get("/flow").headers["cache-control"] == "no-cache"
+    assert "immutable" in client.get("/assets/app.js").headers["cache-control"]
+
+
+def test_missing_asset_is_404_not_index(tmp_path):
+    # 지난 배포의 해시 JS를 HTML로 주면 브라우저가 모듈 MIME 오류로 흰 화면이 된다.
+    response = _client(tmp_path).get("/assets/index-OLDHASH.js")
+    assert response.status_code == 404
+    assert "<html>" not in response.text
