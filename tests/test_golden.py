@@ -9,8 +9,10 @@ from evals.golden.checks import (
     JudgeCase,
     ScenarioCase,
     check_analyze,
+    check_constraints,
     check_judge,
     check_scenario,
+    find_constraint,
     load_cases,
 )
 from server.intake import check_code
@@ -60,6 +62,17 @@ def test_check_judge_and_scenario():
     assert check_judge(verdict, JudgeCase(label="x", choice="A", reason="", max_hit=0)) == []
     assert check_judge(verdict, JudgeCase(label="x", choice="A", reason="", min_hit=1))
 
-    case = ScenarioCase(preset="latency", keywords=["3초"], answer="a")
+    case = ScenarioCase(constraint_keywords=["지연"], keywords=["3초"], answer="a")
     assert check_scenario({"question": "3초 걸리면 어떻게 될까요?"}, case) == []
     assert len(check_scenario({"question": "어떻게? 왜?"}, case)) == 2
+
+
+def test_check_constraint_count_and_pick_by_label():
+    expect = AnalyzeExpect(steps=(1, 3), constraints=(0, 0))
+    body = {"constraints": [{"id": "k1", "label": "call_tool 응답 3초 지연"}]}
+    assert check_constraints(body, expect) == ["제약 1개(기대 0~0): ['call_tool 응답 3초 지연']"]
+
+    case = ScenarioCase(constraint_keywords=["분당", "지연"], keywords=["3초"], answer="a")
+    assert find_constraint(body, case)["id"] == "k1"
+    other = case.model_copy(update={"constraint_keywords": ["메모리"]})
+    assert find_constraint(body, other) is None

@@ -189,3 +189,66 @@ def test_single_step_for_multi_call_code_is_sent_back(client, scripted_model, do
 
     assert response.status_code == 200
     assert "2개 이상으로 나누세요" in input_text(scripted_model.last_call)
+
+
+def test_fewer_decision_points_than_candidates_is_sent_back(client, scripted_model, docs):
+    candidates = [
+        {"topic": "gather로 동시 실행", "lines": [9]},
+        {"topic": "결과 합치기 방식", "lines": [10]},
+    ]
+    merged = analysis_draft(decision_candidates=candidates)
+    scripted_model.extend([final(merged), final(analysis_draft())])
+
+    response = _analyze(client)
+
+    assert response.status_code == 200
+    assert "결정 후보가 2개인데 결정 지점이 1개" in input_text(scripted_model.last_call)
+
+
+def test_count_rules_do_not_fail_the_corrected_output(client, scripted_model, docs):
+    # 개수 규칙은 첫 출력에서만 되돌려 보낸다. 고친 출력이 여전히 모자라도 분석은 성공한다.
+    short = analysis_draft(
+        decision_candidates=[{"topic": "a", "lines": [9]}, {"topic": "b", "lines": [10]}],
+        decision_points=[decision_point(conditions=decision_point()["conditions"][:1])],
+    )
+    scripted_model.extend([final(short), final(short)])
+
+    response = _analyze(client)
+
+    assert response.status_code == 200
+    assert "2개 이상 쓰세요" in input_text(scripted_model.last_call)
+
+
+def test_extra_decision_points_are_trimmed_to_three(client, scripted_model, docs):
+    many = analysis_draft(decision_points=[decision_point(id=f"dp{i}") for i in range(1, 5)])
+    scripted_model.extend([final(many)])
+
+    body = _analyze(client).json()
+
+    assert [dp["id"] for dp in body["decisionPoints"]] == ["dp1", "dp2", "dp3"]
+
+
+def test_symbol_error_suggests_names_on_those_lines(client, scripted_model, docs):
+    bad = analysis_draft(steps=[step(1, "list comprehension", [8]), step(2, "asyncio.gather", [9])])
+    scripted_model.extend([final(bad), final(analysis_draft())])
+
+    _analyze(client)
+
+    assert "(이 줄의 후보: call_tool" in input_text(scripted_model.last_call)
+
+
+@pytest.mark.parametrize("written", ["gather", "asyncio.gather(*tasks)", None])
+def test_official_symbol_variants_are_matched_and_canonicalized(
+    client, scripted_model, gather_doc, written
+):
+    draft = analysis_draft()
+    draft["steps"][1]["evidence"] = [{"badge": "official", "symbol": written, "note": ""}]
+    scripted_model.extend([lookup("asyncio", "gather"), final(draft)])
+
+    evidence = _analyze(client).json()["steps"][1]["evidence"][0]
+
+    assert (evidence["badge"], evidence["symbol"], evidence["url"]) == (
+        "official",
+        "asyncio.gather",
+        GATHER_URL,
+    )

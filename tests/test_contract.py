@@ -123,7 +123,15 @@ def test_request_log_has_no_body(client, caplog: pytest.LogCaptureFixture):
 
 def test_openapi_has_all_endpoints_and_no_dev_routes(client):
     paths = client.get("/openapi.json").json()["paths"]
-    for path in ("/api/scan", "/api/analyze", "/api/judge", "/api/scenario", "/api/feedback"):
+    for path in (
+        "/api/scan",
+        "/api/analyze",
+        "/api/judge",
+        "/api/scenario",
+        "/api/model-answer",
+        "/api/feedback",
+        "/api/summary",
+    ):
         assert path in paths
     assert not any(p.startswith("/api/dev") for p in paths)
 
