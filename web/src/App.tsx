@@ -1,5 +1,6 @@
 // API 확인용 간단한 FE. 6단계 학습 흐름(코드 입력 → 코드 분석 → 설계 선택 → 설계 비교 → 설계 응용 → 학습 정리)을
-// 한 화면 상태로 돈다. 화면에 고정으로 두는 것은 안내·버튼 문구, 설명 수준 3개, 프리셋 4개, 6단계 이름뿐이다.
+// 한 화면 상태로 돈다. 화면에 고정으로 두는 것은 안내·버튼 문구, 설명 수준 3개, 6단계 이름뿐이다.
+// 설계 응용의 제약은 분석이 끝난 뒤 따로 받아 코드에 맞춰 고르고, 하나도 없거나 받지 못하면 설계 응용을 건너뛴다.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
@@ -7,12 +8,12 @@ import {
   MAX_CODE_CHARACTERS,
   redact,
   type AnalyzeResponse,
+  type Constraint,
   type DecisionPoint,
   type Evidence,
   type FeedbackResponse,
   type Level,
   type OptionId,
-  type Preset,
   type ScenarioResponse,
   type SecretFinding,
   type Step,
@@ -24,7 +25,7 @@ import { formatPasted, INDENT, leadingSpaces, nextIndent, reindent } from "./edi
 import { buildHtml, buildMarkdown, formatLines, reportFileName, type ReportData } from "./report";
 
 type Stage = 0 | 1 | 2 | 3 | 4 | 5;
-type PresetWork = {
+type ConstraintWork = {
   scenario: ScenarioResponse;
   answer: string;
   feedback: FeedbackResponse | null;
@@ -32,6 +33,7 @@ type PresetWork = {
   showModel: boolean; // 모범 답변을 펼쳤는지
 };
 type StepState = "current" | "done" | "skipped" | "todo";
+const NO_CONSTRAINTS = "이 코드에는 바꿔 볼 제약이 없어 건너뛰어요";
 const STEP_STATE_LABEL: Record<StepState, string> = {
   current: "현재 단계",
   done: "완료",
@@ -54,12 +56,6 @@ const LEVELS: [Level, string][] = [
   ["basic", "입문"],
   ["work", "실무"],
   ["deep", "심화"],
-];
-const PRESETS: [Preset, string][] = [
-  ["latency", "tool 하나 3초 지연"],
-  ["rateLimit", "rate limit 분당 60회"],
-  ["traffic", "트래픽 10배"],
-  ["team", "팀 3명"],
 ];
 // 분석은 응답을 한 번에 받으므로 진행 단계는 보통 걸리는 시간에 맞춘 안내다(마지막 단계에서 멈춘다).
 const ANALYZE_STEPS: [string, number][] = [
@@ -89,9 +85,12 @@ export default function App() {
   const [showHint, setShowHint] = useState(false);
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
 
-  const [preset, setPreset] = useState<Preset | null>(null);
+  // 분석이 끝나면 뒤에서 받는다. null이면 아직 받는 중이고, 실패하면 빈 목록으로 둔다.
+  const [constraintList, setConstraintList] = useState<Constraint[] | null>(null);
+  const constraintsRequest = useRef(0); // 다시 분석·처음으로 가면 늦게 온 이전 응답을 버린다
+  const [constraintId, setConstraintId] = useState<string | null>(null);
   // 제약마다 질문·답·피드백을 따로 둬서, 제약을 오가도 이어서 쓰고 각각 제출할 수 있다.
-  const [applied, setApplied] = useState<Partial<Record<Preset, PresetWork>>>({});
+  const [applied, setApplied] = useState<Partial<Record<string, ConstraintWork>>>({});
   const [restartDialog, setRestartDialog] = useState(false);
   const [report, setReport] = useState<ReportData | null>(null);
 
@@ -101,6 +100,9 @@ export default function App() {
   const overLimit = code.length > MAX_CODE_CHARACTERS;
   const dps = analysis?.decisionPoints ?? [];
   const dp: DecisionPoint | undefined = dps[dpIndex];
+  const constraints = constraintList ?? [];
+  const constraintsPending = analysis !== null && constraintList === null;
+  const constraint: Constraint | undefined = constraints.find((c) => c.id === constraintId);
   const verdict = dp ? verdicts[dp.id] : undefined;
   // 트레이드오프 표에서 내가 고른 방식의 행을 칠할 때 쓴다(건너뛰었으면 없음).
   const mineLabel = verdict?.mine && dp?.options.find((o) => o.id === verdict.mine!.choice)?.label;
@@ -111,7 +113,7 @@ export default function App() {
     (i === 1 && analysis !== null) ||
     (i === 2 && dp !== undefined && reached >= 2) ||
     (i === 3 && verdict !== undefined) ||
-    (i === 4 && analysis !== null && reached >= 4) ||
+    (i === 4 && constraints.length > 0 && reached >= 4) ||
     (i === 5 && report !== null);
 
   // 단계 표시 상태: 현재 / 완료(그 단계의 일을 끝냄) / 건너뜀(이미 지나쳤지만 끝내지 않음) / 아직 안 감.
@@ -197,14 +199,27 @@ export default function App() {
     );
     if (!result) return;
     setAnalysis(result);
+    loadConstraints(source, result.steps);
     setVerdicts({});
     setDpIndex(0);
     setSelectedStep(null);
     setApplied({});
-    setPreset(null);
+    setConstraintId(null);
     setReport(null);
     setReached(1);
     go(1);
+  };
+
+  const loadConstraints = (source: string, steps: Step[]) => {
+    const request = ++constraintsRequest.current;
+    setConstraintList(null);
+    api
+      .constraints(source, steps)
+      .then((r) => r.constraints)
+      .catch(() => [])
+      .then((list) => {
+        if (constraintsRequest.current === request) setConstraintList(list);
+      });
   };
 
   const submitJudge = async (skip: boolean) => {
@@ -245,45 +260,45 @@ export default function App() {
     go(3);
   };
 
-  const work = preset ? applied[preset] : undefined;
-  const updateWork = (p: Preset, patch: Partial<PresetWork>) =>
-    setApplied((a) => ({ ...a, [p]: { ...a[p]!, ...patch } }));
+  const work = constraint ? applied[constraint.id] : undefined;
+  const updateWork = (id: string, patch: Partial<ConstraintWork>) =>
+    setApplied((a) => ({ ...a, [id]: { ...a[id]!, ...patch } }));
 
-  const pickPreset = async (p: Preset) => {
-    setPreset(p);
+  const pickConstraint = async (c: Constraint) => {
+    setConstraintId(c.id);
     setShowHint(false);
-    if (applied[p]) return; // 한 번 만든 질문과 쓰던 답은 그대로 둔다
-    const result = await run("질문 만들기", () => api.scenario(code, p, analysis?.steps ?? []), () => pickPreset(p));
+    if (applied[c.id]) return; // 한 번 만든 질문과 쓰던 답은 그대로 둔다
+    const result = await run("질문 만들기", () => api.scenario(code, c, analysis?.steps ?? []), () => pickConstraint(c));
     if (result)
-      setApplied((a) => ({ ...a, [p]: { scenario: result, answer: "", feedback: null, modelAnswer: null, showModel: false } }));
+      setApplied((a) => ({ ...a, [c.id]: { scenario: result, answer: "", feedback: null, modelAnswer: null, showModel: false } }));
   };
 
   // 제출한 뒤에도 답을 고쳐 다시 제출할 수 있고, 피드백은 마지막 제출 기준으로 바뀐다.
   const submitFeedback = async () => {
-    if (!preset || !work) return;
-    const p = preset;
+    if (!constraint || !work) return;
+    const c = constraint;
     const result = await run(
       "피드백",
-      () => api.feedback(code, p, work.scenario.question, work.answer),
+      () => api.feedback(code, c, work.scenario.question, work.answer),
       submitFeedback,
     );
-    if (result) updateWork(p, { feedback: result });
+    if (result) updateWork(c.id, { feedback: result });
   };
 
   // 모범 답변은 처음 펼칠 때만 만들고, 이후에는 받아 둔 것을 여닫는다.
   const toggleModelAnswer = async () => {
-    if (!preset || !work) return;
-    const p = preset;
+    if (!constraint || !work) return;
+    const c = constraint;
     if (work.modelAnswer !== null) {
-      updateWork(p, { showModel: !work.showModel });
+      updateWork(c.id, { showModel: !work.showModel });
       return;
     }
     const result = await run(
       "모범 답변",
-      () => api.modelAnswer(code, p, work.scenario.question),
+      () => api.modelAnswer(code, c, work.scenario.question),
       toggleModelAnswer,
     );
-    if (result) updateWork(p, { modelAnswer: result.answer, showModel: true });
+    if (result) updateWork(c.id, { modelAnswer: result.answer, showModel: true });
   };
 
   // 학습 정리: 1~5단계 기록을 모아 핵심 정리만 LLM에 맡기고, 문서는 기록으로 조립한다.
@@ -291,10 +306,10 @@ export default function App() {
   const openSummary = async () => {
     if (!analysis) return;
     const decisions = dps.filter((d) => verdicts[d.id]).map((d) => ({ dp: d, verdict: verdicts[d.id] }));
-    const applications = PRESETS.flatMap(([p, presetName]) => {
-      const w = applied[p];
+    const applications = constraints.flatMap((c) => {
+      const w = applied[c.id];
       return w
-        ? [{ preset: p, presetName, scenario: w.scenario, answer: w.answer, feedback: w.feedback, modelAnswer: w.modelAnswer }]
+        ? [{ constraint: c, scenario: w.scenario, answer: w.answer, feedback: w.feedback, modelAnswer: w.modelAnswer }]
         : [];
     });
     const summary: SummaryResponse | null = await run(
@@ -304,7 +319,7 @@ export default function App() {
           steps: analysis.steps,
           decisions: decisions.map(({ dp, verdict }) => ({ decisionPoint: dp, verdict })),
           applications: applications.map((a) => ({
-            preset: a.preset,
+            constraint: a.constraint,
             question: a.scenario.question,
             answer: a.answer,
             feedback: a.feedback,
@@ -336,9 +351,11 @@ export default function App() {
     setFocusLines([]);
     setQuestion("");
     setAnalysis(null);
+    constraintsRequest.current++;
+    setConstraintList(null);
     setVerdicts({});
     setApplied({});
-    setPreset(null);
+    setConstraintId(null);
     setReport(null);
     setReached(0);
     go(0);
@@ -357,6 +374,20 @@ export default function App() {
   const noChallenge = (stage === 2 || stage === 3) && !(stage === 2 ? dp : dp && verdict);
 
   // 다음 단계로 가는 버튼은 단계마다 페이지 제목 오른쪽 같은 자리에 둔다(주 버튼이 맨 오른쪽).
+  // 바꿔 볼 제약이 없는 코드면 설계 응용을 건너뛰고 학습 정리로 간다.
+  const toApply = constraintsPending ? (
+    <button className="primary" disabled title="이 코드에 맞는 제약을 고르고 있어요">
+      설계 응용 준비 중…
+    </button>
+  ) : constraints.length > 0 ? (
+    <button className="primary" onClick={() => go(4)}>
+      설계 응용
+    </button>
+  ) : (
+    <button className="primary" disabled={busy} onClick={openSummary}>
+      학습 정리
+    </button>
+  );
   let footer: ReactNode = null;
   if (stage === 0) {
     footer = (
@@ -380,19 +411,13 @@ export default function App() {
           </button>
         </>
       ) : (
-        <button className="primary" onClick={() => go(4)}>
-          설계 응용
-        </button>
+        toApply
       );
   } else if (noChallenge) {
     footer = (
       <>
         <button onClick={() => go(1)}>코드 분석으로</button>
-        {dps.length === 0 && (
-          <button className="primary" onClick={() => go(4)}>
-            설계 응용
-          </button>
-        )}
+        {dps.length === 0 && toApply}
       </>
     );
   } else if (stage === 2) {
@@ -413,9 +438,7 @@ export default function App() {
           다음 설계 포인트 ({dpIndex + 2}/{dps.length})
         </button>
       ) : (
-        <button className="primary" onClick={() => go(4)}>
-          설계 응용
-        </button>
+        toApply
       );
   } else if (stage === 4) {
     footer = (
@@ -468,7 +491,7 @@ export default function App() {
                     className={`stepnav-item ${state}`}
                     disabled={!available(i) || loading !== null}
                     aria-current={state === "current" ? "step" : undefined}
-                    title={STEP_STATE_LABEL[state]}
+                    title={i === 4 && analysis && !constraintsPending && constraints.length === 0 ? NO_CONSTRAINTS : STEP_STATE_LABEL[state]}
                     onClick={() => (i === 5 ? openSummary() : go(i as Stage))}
                   >
                     <StepMark state={state} n={i + 1} />
@@ -599,7 +622,7 @@ export default function App() {
             <section className="panel wide">
               <p className="banner info">
                 {dps.length === 0
-                  ? "이 코드에서는 설계 포인트를 찾지 못했어요. 코드 분석을 보거나 설계 응용으로 넘어가 보세요."
+                  ? `이 코드에서는 설계 포인트를 찾지 못했어요. 코드 분석을 보거나 ${constraintsPending || constraints.length > 0 ? "설계 응용" : "학습 정리"}로 넘어가 보세요.`
                   : "아직 선택한 설계 포인트가 없어요. 코드 분석에서 '설계 선택'을 눌러 시작하세요."}
               </p>
             </section>
@@ -730,23 +753,28 @@ export default function App() {
               <section className="panel">
                 <h2>어떤 조건을 추가할까요?</h2>
                 <div className="chips">
-                  {PRESETS.map(([value, name]) => (
+                  {constraints.map((c) => (
                     <button
-                      key={value}
+                      key={c.id}
                       className="chip-button"
-                      aria-pressed={preset === value}
+                      aria-pressed={constraintId === c.id}
                       disabled={loading !== null}
-                      onClick={() => pickPreset(value)}
+                      onClick={() => pickConstraint(c)}
                     >
-                      {name}
+                      {c.label}
                     </button>
                   ))}
                 </div>
               </section>
               {/* 조건을 고르기 전에도 자리를 잡아 둬서, 고른 순간 아래 레이아웃이 튀지 않는다 */}
               <section className="panel apply">
-                {preset && work ? (
+                {constraint && work ? (
                   <>
+                    {/* 버튼 이름(label)·상황(situation)·질문은 역할이 달라 따로 보여 준다 */}
+                    <p className="apply-situation">
+                      <span className="badge situation">상황</span>
+                      {constraint.situation}
+                    </p>
                     <p className="question">{work.scenario.question}</p>
                     <div className="question-row">
                       <p className="muted small">{work.scenario.followUp}</p>
@@ -758,7 +786,7 @@ export default function App() {
                       rows={5}
                       value={work.answer}
                       placeholder="이 조건에서 설계가 어떻게 달라져야 할지 작성해 주세요."
-                      onChange={(e) => updateWork(preset, { answer: e.target.value })}
+                      onChange={(e) => updateWork(constraint.id, { answer: e.target.value })}
                     />
                     <div className="apply-actions">
                       <button aria-pressed={work.showModel} disabled={loading !== null} onClick={toggleModelAnswer}>
