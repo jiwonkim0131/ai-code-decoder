@@ -107,3 +107,23 @@ def test_code_option_must_be_an_option(client):
     dp = {**api_decision_point(), "options": [{"id": "A", "label": "a"}] * 4}
     response = client.post("/api/judge", json={"decisionPoint": dp, "choice": "A"})
     assert response.status_code == 400
+
+
+def test_hit_without_quote_from_answer_is_sent_back(client, scripted_model):
+    invented = judge_draft()
+    invented["conditions"][0]["quote"] = "답에 없는 문장"
+    scripted_model.extend([final(invented), final(judge_draft())])
+
+    response = _judge(
+        client, reason="실패해도   계속 돌리고 싶어요"
+    )  # 공백 차이는 같은 인용으로 본다
+
+    assert response.status_code == 200
+    assert "quote가 사용자 답에 그대로 있지 않습니다" in input_text(scripted_model.last_call)
+
+
+def test_skip_mode_ignores_quotes(client, scripted_model):
+    draft = judge_draft({"c1": None, "c2": None})
+    scripted_model.extend([final(draft)])
+
+    assert _judge(client, choice=None, reason="").status_code == 200

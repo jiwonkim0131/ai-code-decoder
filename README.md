@@ -23,6 +23,7 @@ uv run uvicorn app:app --reload        # http://127.0.0.1:8000/api/health, /docs
 | `uv run pytest` | 테스트 (OpenAI 호출 없음) |
 | `uv run ruff check . && uv run ruff format --check .` | 린트·포맷 확인 |
 | `uv run python scripts/export_openapi.py` | `contract/openapi.json` 갱신 (FE 타입 생성용) |
+| `uv run python -m evals.golden [--case ID] [--save]` | 골든 샘플 평가. **실제 OpenAI를 부른다**(비용 발생). `--save`는 응답을 `evals/golden/out/`에 저장 |
 
 ## 환경변수
 
@@ -31,8 +32,58 @@ uv run uvicorn app:app --reload        # http://127.0.0.1:8000/api/health, /docs
 | `OPENAI_API_KEY` | OpenAI API 키. 로컬은 `.env`, 배포는 Vercel 환경변수에만 둔다 |
 | `OPENAI_MODEL` | 에이전트가 쓰는 모델 이름 |
 | `ALLOWED_LANGS` | 분석 허용 언어(쉼표 구분). 기본 `python` |
+| `AGENT_TIMEOUT_SECONDS` | 요청 하나에서 에이전트 실행(수정 요청 포함)에 쓰는 최대 시간. 기본 `60`. 넘으면 502 `llm_unavailable` |
 | `ENABLE_DEV_ROUTES` | `true`면 실측용 API(`POST /api/dev/agent-ping`, `POST /api/dev/lookup-docs`)를 연다. 배포에서는 `false` |
 
 ## 배포 (Vercel)
 
 Vercel이 루트의 `app.py`에서 FastAPI `app`을 찾는다. `vercel link` → `vercel dev`로 로컬 확인 후, 대시보드에 환경변수를 등록하고 배포한다.
+
+## 비용·남용 보호 (BE-09)
+
+코드로 막는 것: 입력 20,000자, 요청 본문 256KB, FE가 다시 보내는 목록 상한(steps 8개, evidence 20개),
+에이전트 최대 턴(분석 6, 판정·코치 1)과 문서 조회 5회, 출력 토큰 상한(분석 6,000 · 판정 2,000 · 코치 1,000),
+요청당 시간 상한(`AGENT_TIMEOUT_SECONDS`). 요청마다 `kind=agent:*` 로그 한 줄에 토큰 수·도구 호출 수·실패 코드를 남긴다.
+
+배포 전에 손으로 해야 하는 것:
+
+- OpenAI 대시보드(Settings → Limits)에서 프로젝트 월 사용 한도를 건다. 한도에 닿으면 API는 502 `llm_unavailable`을 돌려준다.
+- Vercel 대시보드(Firewall)에서 `/api/analyze` 등에 IP 기준 rate limit 규칙을 걸 수 있는지 Hobby 플랜에서 확인한다.
+  안 되면 위의 상한만으로 막는다. 사용자별 한도는 저장소가 필요해 만들지 않았다.
+
+| 상황 | 응답 |
+| --- | --- |
+| OpenAI 호출 한도(429) | 429 `rate_limited` |
+| OpenAI 월 한도 소진, 장애, 인증 실패, 시간 초과 | 502 `llm_unavailable` |
+| `OPENAI_API_KEY` 없음 | 503 `llm_unavailable` |
+| 검증 2회 실패, 도구 계약 위반, 최대 턴 초과 | 502 `analysis_failed` |
+
+## 골든 샘플 평가 (BE-10)
+
+`evals/golden/cases.jsonl` 한 줄이 케이스 하나다. 분석 대상 코드는 `evals/golden/samples/`에 있고,
+평가는 FE와 같은 순서(analyze → judge → constraints → scenario → feedback)로 API를 불러 `evals/golden/checks.py`의 규칙으로 본다.
+설계 응용의 제약은 코드마다 모델이 고르므로, 케이스는 제약 수 범위와 "이런 축의 제약이 하나는 있는가"(라벨 키워드)만 본다.
+
+| 케이스 | 보는 것 |
+| --- | --- |
+| `agent-tools` | 목업 사례. 9번째 줄 asyncio.gather 결정 지점, gather 공식 문서 배지, 판정 방향(조건을 짚은 답 / 이유 없는 답 / 건너뛰기), 지연 제약과 그 질문 |
+| `fetch-users` | 서드파티 패키지(requests) 공식 문서 배지, 재시도 결정 지점, 호출 한도·응답 지연 제약과 그 질문 |
+| `prompt-injection` | 주석 속 가짜 SYSTEM 지시에 넘어가지 않는지(단계 수, 줄 번호, 배지) |
+| `order-total` | 외부 호출·동시성이 없는 단순 계산 코드라 제약이 0개(설계 응용을 건너뜀) |
+
+프롬프트를 고칠 때마다 돌려 회귀를 확인한다. 검사 규칙 자체의 테스트(`tests/test_golden.py`)는 OpenAI 없이 돈다.
+
+## 확인용 FE (`web/`)
+
+API가 끝까지 도는지 보기 위한 간단한 React + TypeScript + Vite 화면이다(설계의 FE-01~12 전체가 아니다).
+타입은 `contract/openapi.json`에서 생성한다. 루트에 package.json을 두면 Vercel이 Vite 프로젝트로 인식할 수 있어 `web/`에 분리했다.
+
+```bash
+cd web && npm install
+npm run gen:api      # contract/openapi.json → src/api/schema.ts
+npm run dev          # http://localhost:5173 (uvicorn :8000으로 /api 프록시)
+npm run build        # web/dist → FastAPI가 같은 도메인에서 서빙(server/frontend.py)
+```
+
+`web/dist`가 있으면 `uv run uvicorn app:app`만으로 http://127.0.0.1:8000/ 에서 화면과 API를 함께 쓸 수 있다.
+배포에 포함하려면 Vercel 빌드에서 `web` 빌드를 돌리거나 dist를 함께 올려야 한다(아직 설정하지 않음).

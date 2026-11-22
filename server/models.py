@@ -15,11 +15,16 @@ from pydantic.alias_generators import to_camel
 MAX_CODE_CHARACTERS = 20_000
 MAX_QUESTION_CHARACTERS = 1_000
 MAX_ANSWER_CHARACTERS = 2_000
+# FE가 다시 보내 프롬프트에 들어가는 목록의 상한(비용·남용 보호, BE-09)
+MAX_STEPS = 8
+MAX_EVIDENCE = 20
+MAX_DECISIONS = 3  # 분석이 내는 결정 지점 상한과 같다
+MAX_CONSTRAINTS = 5  # 분석이 내는 제약 상한
+MAX_APPLICATIONS = MAX_CONSTRAINTS
 
 AudienceLevel = Literal["basic", "work", "deep"]
 OptionId = Literal["A", "B", "C", "D"]
 BadgeKind = Literal["official", "inferred", "needs_check"]
-Preset = Literal["latency", "rateLimit", "traffic", "team"]
 ConditionStatus = Literal["hit", "miss"]
 
 LineNumber = Annotated[int, Field(ge=1)]
@@ -100,6 +105,20 @@ class DecisionPoint(ApiModel):
     conditions: list[Condition] = Field(min_length=1)
 
 
+class Constraint(ApiModel):
+    """설계 응용에서 바꿔 볼 제약 1개. 코드에 맞춰 만들고, 걸 곳이 없으면 만들지 않는다.
+
+    assumption·rationale은 정답에 가까워 화면에 보이지 않고 코치 입력에만 쓴다."""
+
+    id: str
+    label: str = Field(description="칩 문구(짧게)")
+    situation: str = Field(description="바뀐 상황 설명. 화면에 보인다")
+    lines: list[LineNumber] = Field(min_length=1)
+    symbol: str = Field(description="이 제약이 걸리는 코드의 심볼")
+    assumption: str = Field(description="이 코드가 가정한 운영 조건(이 제약이 깨는 것)")
+    rationale: str
+
+
 # --- POST /api/scan -----------------------------------------------------
 
 
@@ -156,7 +175,7 @@ class AnalyzeResponse(ApiModel):
 
 class JudgeRequest(ApiModel):
     decision_point: DecisionPoint
-    evidence: list[Evidence] = Field(default_factory=list)
+    evidence: list[Evidence] = Field(default_factory=list, max_length=MAX_EVIDENCE)
     choice: OptionId | None = None
     reason: str = Field(default="", max_length=MAX_ANSWER_CHARACTERS)
     level: AudienceLevel = "work"
@@ -206,25 +225,49 @@ class Verdict(ApiModel):
     tradeoffs: Tradeoffs
 
 
-# --- POST /api/scenario, /api/feedback ---------------------------------
+# --- POST /api/constraints, /api/scenario, /api/model-answer, /api/feedback
+
+
+class ConstraintsRequest(ApiModel):
+    """분석이 끝난 뒤 따로 부른다. 실패해도 분석 결과는 그대로 쓴다(설계 응용만 건너뜀)."""
+
+    code: Code
+    steps: list[Step] = Field(default_factory=list, max_length=MAX_STEPS)
+
+
+class ConstraintsResponse(ApiModel):
+    constraints: list[Constraint] = Field(
+        max_length=MAX_CONSTRAINTS, description="비어 있으면 설계 응용 단계를 건너뛴다"
+    )
 
 
 class ScenarioRequest(ApiModel):
     code: Code
-    preset: Preset
-    steps: list[Step] = Field(default_factory=list)
+    constraint: Constraint
+    steps: list[Step] = Field(default_factory=list, max_length=MAX_STEPS)
 
 
 class ScenarioResponse(ApiModel):
-    preset: Preset
-    question: str
+    constraint_id: str
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     follow_up: str
+    hint: str = Field(description="답을 말하지 않고 생각할 방향만 주는 힌트")
+
+
+class ModelAnswerRequest(ApiModel):
+    code: Code
+    constraint: Constraint
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
+
+
+class ModelAnswerResponse(ApiModel):
+    answer: str
 
 
 class FeedbackRequest(ApiModel):
     code: Code
-    preset: Preset
-    question: str
+    constraint: Constraint
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
     answer: str = Field(min_length=1, max_length=MAX_ANSWER_CHARACTERS)
 
 
@@ -232,6 +275,51 @@ class FeedbackResponse(ApiModel):
     verdict: str
     points: list[str]
     further: str
+
+
+# --- POST /api/summary --------------------------------------------------
+
+
+class SummaryDecision(ApiModel):
+    """설계 선택·비교 한 건. 판정 화면에 쓴 그대로 다시 보낸다."""
+
+    decision_point: DecisionPoint
+    verdict: Verdict
+
+
+class SummaryApplication(ApiModel):
+    """설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다."""
+
+    constraint: Constraint
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARACTERS)
+    answer: str = Field(default="", max_length=MAX_ANSWER_CHARACTERS)
+    feedback: FeedbackResponse | None = None
+    model_answer: str | None = Field(default=None, max_length=MAX_ANSWER_CHARACTERS)
+
+
+class SummaryRequest(ApiModel):
+    """학습 정리. 서버가 학습 기록을 기억하지 않으므로 FE가 1~5단계 결과를 모아 보낸다.
+
+    코드는 보내지 않는다(단계·결정 지점에 줄과 심볼이 있다)."""
+
+    steps: list[Step] = Field(min_length=1, max_length=MAX_STEPS)
+    decisions: list[SummaryDecision] = Field(default_factory=list, max_length=MAX_DECISIONS)
+    applications: list[SummaryApplication] = Field(
+        default_factory=list, max_length=MAX_APPLICATIONS
+    )
+
+
+class Takeaway(ApiModel):
+    text: str
+    refs: list[str] = Field(
+        min_length=1,
+        description='근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<constraint id>"',
+    )
+
+
+class SummaryResponse(ApiModel):
+    takeaways: list[Takeaway]
+    review_points: list[str] = Field(description="다시 볼 것(놓친 판단 기준, 더 생각해 볼 점)")
 
 
 # --- 오류 ---------------------------------------------------------------

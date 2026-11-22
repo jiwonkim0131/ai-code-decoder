@@ -69,6 +69,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -81,6 +91,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -131,6 +151,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -143,6 +173,16 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -193,6 +233,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -212,6 +262,98 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/constraints": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Constraints",
+        "description": "설계 응용에서 바꿔 볼 제약을 코드에 맞춰 고른다. 분석이 끝난 뒤 따로 부른다.",
+        "operationId": "constraints_api_constraints_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConstraintsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConstraintsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "호출 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -222,7 +364,7 @@
           "learning"
         ],
         "summary": "Scenario",
-        "description": "제약 프리셋에 맞는 실패 주입 질문을 만든다.",
+        "description": "분석이 고른 제약에 맞는 실패 주입 질문을 만든다.",
         "operationId": "scenario_api_scenario_post",
         "requestBody": {
           "content": {
@@ -255,6 +397,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -267,6 +419,98 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-answer": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Model Answer",
+        "description": "실패 주입 질문의 모범 답변을 만든다. 사용자가 보기를 눌렀을 때만 부른다.",
+        "operationId": "model_answer_api_model_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAnswerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "호출 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -317,6 +561,16 @@
               }
             }
           },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "호출 한도",
             "content": {
@@ -329,6 +583,98 @@
           },
           "502": {
             "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/summary": {
+      "post": {
+        "tags": [
+          "learning"
+        ],
+        "summary": "Summary",
+        "description": "1~5단계 학습 기록으로 핵심 정리를 만든다. 코드는 받지 않는다(기록에 줄·심볼이 있음).",
+        "operationId": "summary_api_summary_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "입력 오류",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "요청 본문이 너무 큼",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "호출 한도",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "LLM 장애 또는 분석 실패",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "LLM 설정 없음",
             "content": {
               "application/json": {
                 "schema": {
@@ -539,6 +885,104 @@
         ],
         "title": "ConditionVerdict"
       },
+      "Constraint": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "칩 문구(짧게)"
+          },
+          "situation": {
+            "type": "string",
+            "title": "Situation",
+            "description": "바뀐 상황 설명. 화면에 보인다"
+          },
+          "lines": {
+            "items": {
+              "type": "integer",
+              "minimum": 1.0
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Lines"
+          },
+          "symbol": {
+            "type": "string",
+            "title": "Symbol",
+            "description": "이 제약이 걸리는 코드의 심볼"
+          },
+          "assumption": {
+            "type": "string",
+            "title": "Assumption",
+            "description": "이 코드가 가정한 운영 조건(이 제약이 깨는 것)"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "situation",
+          "lines",
+          "symbol",
+          "assumption",
+          "rationale"
+        ],
+        "title": "Constraint",
+        "description": "설계 응용에서 바꿔 볼 제약 1개. 코드에 맞춰 만들고, 걸 곳이 없으면 만들지 않는다.\n\nassumption·rationale은 정답에 가까워 화면에 보이지 않고 코치 입력에만 쓴다."
+      },
+      "ConstraintsRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Steps"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "ConstraintsRequest",
+        "description": "분석이 끝난 뒤 따로 부른다. 실패해도 분석 결과는 그대로 쓴다(설계 응용만 건너뜀)."
+      },
+      "ConstraintsResponse": {
+        "properties": {
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/Constraint"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Constraints",
+            "description": "비어 있으면 설계 응용 단계를 건너뛴다"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "constraints"
+        ],
+        "title": "ConstraintsResponse"
+      },
       "DecisionPoint": {
         "properties": {
           "id": {
@@ -716,18 +1160,13 @@
             "minLength": 1,
             "title": "Code"
           },
-          "preset": {
-            "type": "string",
-            "enum": [
-              "latency",
-              "rateLimit",
-              "traffic",
-              "team"
-            ],
-            "title": "Preset"
+          "constraint": {
+            "$ref": "#/components/schemas/Constraint"
           },
           "question": {
             "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
             "title": "Question"
           },
           "answer": {
@@ -741,7 +1180,7 @@
         "type": "object",
         "required": [
           "code",
-          "preset",
+          "constraint",
           "question",
           "answer"
         ],
@@ -784,6 +1223,7 @@
               "$ref": "#/components/schemas/Evidence"
             },
             "type": "array",
+            "maxItems": 20,
             "title": "Evidence"
           },
           "choice": {
@@ -826,6 +1266,47 @@
           "decisionPoint"
         ],
         "title": "JudgeRequest"
+      },
+      "ModelAnswerRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "constraint": {
+            "$ref": "#/components/schemas/Constraint"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "constraint",
+          "question"
+        ],
+        "title": "ModelAnswerRequest"
+      },
+      "ModelAnswerResponse": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "title": "ModelAnswerResponse"
       },
       "MyAnswer": {
         "properties": {
@@ -929,21 +1410,15 @@
             "minLength": 1,
             "title": "Code"
           },
-          "preset": {
-            "type": "string",
-            "enum": [
-              "latency",
-              "rateLimit",
-              "traffic",
-              "team"
-            ],
-            "title": "Preset"
+          "constraint": {
+            "$ref": "#/components/schemas/Constraint"
           },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/Step"
             },
             "type": "array",
+            "maxItems": 8,
             "title": "Steps"
           }
         },
@@ -951,37 +1426,39 @@
         "type": "object",
         "required": [
           "code",
-          "preset"
+          "constraint"
         ],
         "title": "ScenarioRequest"
       },
       "ScenarioResponse": {
         "properties": {
-          "preset": {
+          "constraintId": {
             "type": "string",
-            "enum": [
-              "latency",
-              "rateLimit",
-              "traffic",
-              "team"
-            ],
-            "title": "Preset"
+            "title": "Constraintid"
           },
           "question": {
             "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
             "title": "Question"
           },
           "followUp": {
             "type": "string",
             "title": "Followup"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint",
+            "description": "답을 말하지 않고 생각할 방향만 주는 힌트"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "preset",
+          "constraintId",
           "question",
-          "followUp"
+          "followUp",
+          "hint"
         ],
         "title": "ScenarioResponse"
       },
@@ -1104,6 +1581,159 @@
           "out"
         ],
         "title": "StepIO"
+      },
+      "SummaryApplication": {
+        "properties": {
+          "constraint": {
+            "$ref": "#/components/schemas/Constraint"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Answer",
+            "default": ""
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelAnswer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelanswer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "constraint",
+          "question"
+        ],
+        "title": "SummaryApplication",
+        "description": "설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다."
+      },
+      "SummaryDecision": {
+        "properties": {
+          "decisionPoint": {
+            "$ref": "#/components/schemas/DecisionPoint"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/Verdict"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decisionPoint",
+          "verdict"
+        ],
+        "title": "SummaryDecision",
+        "description": "설계 선택·비교 한 건. 판정 화면에 쓴 그대로 다시 보낸다."
+      },
+      "SummaryRequest": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Steps"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryDecision"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Decisions"
+          },
+          "applications": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryApplication"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Applications"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "title": "SummaryRequest",
+        "description": "학습 정리. 서버가 학습 기록을 기억하지 않으므로 FE가 1~5단계 결과를 모아 보낸다.\n\n코드는 보내지 않는다(단계·결정 지점에 줄과 심볼이 있다)."
+      },
+      "SummaryResponse": {
+        "properties": {
+          "takeaways": {
+            "items": {
+              "$ref": "#/components/schemas/Takeaway"
+            },
+            "type": "array",
+            "title": "Takeaways"
+          },
+          "reviewPoints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reviewpoints",
+            "description": "다시 볼 것(놓친 판단 기준, 더 생각해 볼 점)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "takeaways",
+          "reviewPoints"
+        ],
+        "title": "SummaryResponse"
+      },
+      "Takeaway": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Refs",
+            "description": "근거가 된 학습 기록. \"step:<id>\", \"decision:<id>\", \"apply:<constraint id>\""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "refs"
+        ],
+        "title": "Takeaway"
       },
       "ToolCall": {
         "properties": {

@@ -16,6 +16,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# --- Evals: 골든 평가 응답(로컬 확인·FE fixture용) ---
+evals/golden/out/
+
 # --- Frontend ---
 node_modules/
 dist/

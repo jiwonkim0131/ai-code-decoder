@@ -7,3 +7,5 @@ tests/
 evals/
 scripts/
 node_modules/
+# FE는 배포 빌드에서 새로 만든다(로컬 빌드 결과를 올리지 않음).
+web/dist/
