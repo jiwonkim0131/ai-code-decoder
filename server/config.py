@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 DEFAULT_MODEL = "gpt-4.1-mini"
+# 요청 하나에서 에이전트 실행(수정 요청 포함)에 쓰는 최대 시간. 분석 p95 40초 목표에 여유를 둔 값
+DEFAULT_AGENT_TIMEOUT_SECONDS = 60.0
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -17,6 +19,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name) or default)
+    except ValueError:
+        return default
 
 
 def _env_list(name: str, default: str) -> tuple[str, ...]:
@@ -30,6 +39,7 @@ class Settings:
     openai_model: str
     allowed_langs: tuple[str, ...]
     enable_dev_routes: bool
+    agent_timeout_seconds: float = DEFAULT_AGENT_TIMEOUT_SECONDS
 
     @property
     def has_openai_key(self) -> bool:
@@ -43,4 +53,5 @@ def get_settings() -> Settings:
         openai_model=os.getenv("OPENAI_MODEL") or DEFAULT_MODEL,
         allowed_langs=_env_list("ALLOWED_LANGS", "python"),
         enable_dev_routes=_env_bool("ENABLE_DEV_ROUTES"),
+        agent_timeout_seconds=_env_float("AGENT_TIMEOUT_SECONDS", DEFAULT_AGENT_TIMEOUT_SECONDS),
     )

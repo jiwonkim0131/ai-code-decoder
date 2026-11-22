@@ -10,11 +10,8 @@ from __future__ import annotations
 
 from agents import (
     Agent,
-    MaxTurnsExceeded,
-    ModelBehaviorError,
     ModelSettings,
     RunContextWrapper,
-    Runner,
     UserError,
     function_tool,
 )
@@ -22,6 +19,7 @@ from agents import (
 from server.agents import runtime
 from server.agents.context import AnalystContext, ToolContractError
 from server.agents.prompts import ANALYST_PROMPT, analyst_input
+from server.agents.runtime import RunStats
 from server.agents.schemas import AnalysisDraft
 from server.config import get_settings
 from server.errors import ApiError, ErrorCode
@@ -32,6 +30,7 @@ from server.verify import VerificationError, verify_analysis
 MAX_TURNS = 6  # lookup_docs 최대 5 + 최종 출력 1 (parallel_tool_calls=False)
 RETRY_MAX_TURNS = 3
 RETRY_BUDGET_SECONDS = 20.0
+MAX_OUTPUT_TOKENS = 6000  # 단계·결정 지점 JSON이 잘리지 않을 만큼(BE-09 출력 토큰 상한)
 
 UNSUPPORTED_LOOKUP = (
     '{"status": "unsupported", "excerpt": "facts.calls에 있는 (module, symbol)만 조회할 수 있다."}'
@@ -61,48 +60,49 @@ def build_analyst(checked: CheckedCode, level: str) -> Agent[AnalystContext]:
         instructions=f"{ANALYST_PROMPT}\n{checked.adapter.prompt_hints(level)}",
         model=runtime.agent_model(settings),
         tools=[lookup_docs],
-        model_settings=ModelSettings(parallel_tool_calls=False),
+        model_settings=ModelSettings(parallel_tool_calls=False, max_tokens=MAX_OUTPUT_TOKENS),
         output_type=AnalysisDraft,
     )
 
 
-def _add_usage(ctx: AnalystContext, result) -> None:
-    usage = getattr(getattr(result, "context_wrapper", None), "usage", None)
-    ctx.tokens += getattr(usage, "total_tokens", 0) or 0
-
-
-async def run_analyst(req: AnalyzeRequest, checked: CheckedCode) -> AnalyzeResponse:
+async def run_analyst(
+    req: AnalyzeRequest, checked: CheckedCode, stats: RunStats | None = None
+) -> AnalyzeResponse:
     model_name = get_settings().openai_model
     ctx = AnalystContext(
         code=req.code, level=req.level, adapter=checked.adapter, facts=checked.facts
     )
-    agent = build_analyst(checked, req.level)
-    user_input = analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level)
+    stats = stats or RunStats()
+    attempts = 0
+
+    def verify(output: AnalysisDraft) -> AnalyzeResponse:
+        # 개수 규칙은 고칠 기회가 남았을 때만 건다.
+        # 재시도 예산을 넘겼거나 이미 고친 출력이면 모자라도 받는다.
+        nonlocal attempts
+        attempts += 1
+        can_retry = attempts == 1 and ctx.elapsed() <= RETRY_BUDGET_SECONDS
+        return verify_analysis(output, ctx, model_name, require_counts=can_retry)
+
     try:
-        result = await Runner.run(agent, user_input, context=ctx, max_turns=MAX_TURNS)
-        _add_usage(ctx, result)
-        try:
-            return verify_analysis(result.final_output, ctx, model_name)
-        except VerificationError as exc:
-            if ctx.elapsed() > RETRY_BUDGET_SECONDS:
-                raise
-            # 처음부터 다시 실행하지 않고, 같은 대화에 검증 오류를 붙여 모델이 고치게 한다.
-            retry_input = result.to_input_list() + [
-                {
-                    "role": "user",
-                    "content": f"출력에 다음 오류가 있다. 고쳐서 다시 출력하라.\n{exc.report()}",
-                }
-            ]
-            result = await Runner.run(agent, retry_input, context=ctx, max_turns=RETRY_MAX_TURNS)
-            _add_usage(ctx, result)
-            return verify_analysis(result.final_output, ctx, model_name)
+        return await runtime.run_with_correction(
+            build_analyst(checked, req.level),
+            analyst_input(req.code, checked.facts, req.question, req.focus_lines, req.level),
+            verify,
+            stats=stats,
+            context=ctx,
+            max_turns=MAX_TURNS,
+            retry_max_turns=RETRY_MAX_TURNS,
+            may_retry=lambda: ctx.elapsed() <= RETRY_BUDGET_SECONDS,
+        )
     except UserError as exc:
         # 도구 안의 예외는 SDK가 UserError로 감싼다(failure_error_function=None).
         if not isinstance(exc.__cause__, ToolContractError):
             raise
         raise _analysis_failed() from exc
-    except (VerificationError, ToolContractError, MaxTurnsExceeded, ModelBehaviorError) as exc:
+    except (VerificationError, ToolContractError) as exc:
         raise _analysis_failed() from exc
+    finally:
+        stats.tool_calls = len(ctx.calls)
 
 
 def _analysis_failed() -> ApiError:

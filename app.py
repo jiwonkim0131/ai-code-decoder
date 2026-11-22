@@ -15,6 +15,8 @@ from fastapi import FastAPI  # noqa: E402
 from server.agents.runtime import configure_agents  # noqa: E402
 from server.config import get_settings  # noqa: E402
 from server.errors import install_error_handlers  # noqa: E402
+from server.frontend import install_frontend  # noqa: E402
+from server.limits import install_body_limit  # noqa: E402
 from server.logs import install_request_logging  # noqa: E402
 from server.routes import router as api_router  # noqa: E402
 
@@ -27,6 +29,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="AI Code Decoder API", version="0.1.0")
     install_error_handlers(app)
+    install_body_limit(app)
     install_request_logging(app)
 
     @app.get("/api/health", tags=["system"])
@@ -40,6 +43,7 @@ def create_app() -> FastAPI:
 
         app.include_router(dev_router)
 
+    install_frontend(app)  # 가장 마지막: /api 라우트가 먼저 매칭된다
     return app
 
 
