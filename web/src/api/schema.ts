@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/constraints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Constraints
+         * @description 설계 응용에서 바꿔 볼 제약을 코드에 맞춰 고른다. 분석이 끝난 뒤 따로 부른다.
+         */
+        post: operations["constraints_api_constraints_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scenario": {
         parameters: {
             query?: never;
@@ -92,7 +112,7 @@ export interface paths {
         put?: never;
         /**
          * Scenario
-         * @description 제약 프리셋에 맞는 실패 주입 질문을 만든다.
+         * @description 분석이 고른 제약에 맞는 실패 주입 질문을 만든다.
          */
         post: operations["scenario_api_scenario_post"];
         delete?: never;
@@ -240,6 +260,58 @@ export interface components {
             note: string;
         };
         /**
+         * Constraint
+         * @description 설계 응용에서 바꿔 볼 제약 1개. 코드에 맞춰 만들고, 걸 곳이 없으면 만들지 않는다.
+         *
+         *     assumption·rationale은 정답에 가까워 화면에 보이지 않고 코치 입력에만 쓴다.
+         */
+        Constraint: {
+            /** Id */
+            id: string;
+            /**
+             * Label
+             * @description 칩 문구(짧게)
+             */
+            label: string;
+            /**
+             * Situation
+             * @description 바뀐 상황 설명. 화면에 보인다
+             */
+            situation: string;
+            /** Lines */
+            lines: number[];
+            /**
+             * Symbol
+             * @description 이 제약이 걸리는 코드의 심볼
+             */
+            symbol: string;
+            /**
+             * Assumption
+             * @description 이 코드가 가정한 운영 조건(이 제약이 깨는 것)
+             */
+            assumption: string;
+            /** Rationale */
+            rationale: string;
+        };
+        /**
+         * ConstraintsRequest
+         * @description 분석이 끝난 뒤 따로 부른다. 실패해도 분석 결과는 그대로 쓴다(설계 응용만 건너뜀).
+         */
+        ConstraintsRequest: {
+            /** Code */
+            code: string;
+            /** Steps */
+            steps?: components["schemas"]["Step"][];
+        };
+        /** ConstraintsResponse */
+        ConstraintsResponse: {
+            /**
+             * Constraints
+             * @description 비어 있으면 설계 응용 단계를 건너뛴다
+             */
+            constraints: components["schemas"]["Constraint"][];
+        };
+        /**
          * DecisionPoint
          * @description 결정 지점 1개 = "너라면?" 1문제.
          */
@@ -301,11 +373,7 @@ export interface components {
         FeedbackRequest: {
             /** Code */
             code: string;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Question */
             question: string;
             /** Answer */
@@ -343,11 +411,7 @@ export interface components {
         ModelAnswerRequest: {
             /** Code */
             code: string;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Question */
             question: string;
         };
@@ -392,21 +456,14 @@ export interface components {
         ScenarioRequest: {
             /** Code */
             code: string;
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Steps */
             steps?: components["schemas"]["Step"][];
         };
         /** ScenarioResponse */
         ScenarioResponse: {
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            /** Constraintid */
+            constraintId: string;
             /** Question */
             question: string;
             /** Followup */
@@ -469,11 +526,7 @@ export interface components {
          * @description 설계 응용 한 건. 답을 쓰지 않았으면 answer가 빈 문자열이고 feedback이 null이다.
          */
         SummaryApplication: {
-            /**
-             * Preset
-             * @enum {string}
-             */
-            preset: "latency" | "rateLimit" | "traffic" | "team";
+            constraint: components["schemas"]["Constraint"];
             /** Question */
             question: string;
             /**
@@ -523,7 +576,7 @@ export interface components {
             text: string;
             /**
              * Refs
-             * @description 근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<preset>"
+             * @description 근거가 된 학습 기록. "step:<id>", "decision:<id>", "apply:<constraint id>"
              */
             refs: string[];
         };
@@ -767,6 +820,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Verdict"];
+                };
+            };
+            /** @description 입력 오류 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 요청 본문이 너무 큼 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description 호출 한도 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 장애 또는 분석 실패 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description LLM 설정 없음 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    constraints_api_constraints_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConstraintsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstraintsResponse"];
                 };
             };
             /** @description 입력 오류 */

@@ -135,34 +135,58 @@ def judge_input(decision_point, choice: str | None, reason: str, level: str) -> 
     )
 
 
-# 제약 프리셋 4개. 이름은 화면 고정 문구와 같고, 설명은 모델에게 주는 상황이다.
-PRESETS: dict[str, tuple[str, str]] = {
-    "latency": (
-        "tool 하나 3초 지연",
-        "외부 호출(tool) 중 하나가 매번 3초씩 걸린다. 전체 응답 시간, 타임아웃, 느린 호출이 나머지에 주는 영향을 본다.",
-    ),
-    "rateLimit": (
-        "rate limit 분당 60회",
-        "호출하는 외부 API에 분당 60회 호출 제한이 생겼다. 한 번에 나가는 호출 수, 제한 초과 시 실패 처리, 재시도·백오프를 본다.",
-    ),
-    "traffic": (
-        "트래픽 10배",
-        "이 코드로 들어오는 요청이 지금의 10배로 늘었다. 동시에 실행되는 작업 수, 연결·메모리 같은 자원, 병목을 본다.",
-    ),
-    "team": (
-        "팀 3명",
-        "이 코드를 개발자 3명이 나눠 고치고 운영한다(동시 호출 이야기가 아니다). 다른 사람이 고칠 때 실수하기 쉬운 곳, "
-        "예외 처리 규칙이 코드에 드러나는지, 테스트로 지켜야 할 동작을 본다.",
-    ),
-}
+CONSTRAINTS_PROMPT = f"""\
+너는 설계 판단을 가르치는 코치다. 설계 응용 단계에서 사용자가 "이 조건이 바뀌면 이 코드는 어떻게 될까?"를
+생각해 볼 제약을 0~5개 고른다. 한국어로 쓰고 코드·식별자는 원문 그대로 둔다. {DATA_NOTICE}
+
+제약이란
+- 이 코드 바깥의 운영 조건이 바뀐 상황이다. 코드를 한 줄도 고치지 않았는데 조건이 바뀌어서, 이 코드의 특정 줄이
+  실제로 다르게 동작하거나 다시 설계해야 한다. 축은 아래 세 가지로 한정한다.
+  - 외부 의존: 네트워크·API·DB·파일 같은 외부 호출의 지연, 실패, 호출 한도(rate limit)
+  - 규모·부하: 처리할 작업 수, 요청량, 데이터 크기가 크게 늘어남
+  - 동시성·자원: 동시에 도는 작업, 연결·메모리·워커 같은 공유 자원의 한계, 부분 실패, 순서 보장
+- 제약이 아닌 것
+  - 코드 수정: 설정값·로직을 바꾸는 것(나쁜 예: "재시도 횟수 5회로 증가", "세마포어 10개로 늘림")
+  - 코드 설명: 코드에 이미 있는 설정·동작(나쁜 예: timeout=1.5가 있는 코드에 "호출 타임아웃 1.5초")
+  - 입력 검증·엣지 케이스: 잘못된 타입, 빠진 키, 인코딩, 권한 오류처럼 버그·예외 처리로 다룰 문제
+  - 어디에나 붙는 조건: 코드와 상관없는 "트래픽 10배", "팀 3명"
+- 그 축의 설계 판단(외부 호출, 타임아웃, 재시도, 동시 실행, 배치, 캐시, 자원 관리 등)이 이 코드에 실제로 있을 때만 만든다.
+  단순 계산·변환·출력·설정 읽기 코드는 빈 목록이 정상이다. 데이터가 커지면 느려진다는 정도로는 제약을 만들지 않는다.
+- 제약마다 "이 코드를 운영하는 개발자가 이 상황을 실제로 대비해야 하는가?"를 따져 보고, 확신이 없으면 뺀다.
+  개수를 채우려고 만들지 않는다. 보통 0~2개이고, 외부 호출·동시성이 여러 겹인 코드에서만 3개 이상이 된다.
+- 서로 다른 축의 제약만 고른다. 같은 줄의 같은 문제를 숫자만 바꿔 여러 개로 쓰지 않는다. 배울 가치가 큰 순서로 쓴다.
+
+쓰는 순서(필드 순서대로)
+0. operational_lines: 외부 호출(네트워크·API·DB·파일), 동시 실행, 재시도·타임아웃, 공유 자원 관리가 실제로 있는 줄을 먼저 적는다.
+   sum·round·문자열 처리 같은 계산·변환 줄은 넣지 않는다. 비어 있으면 constraints도 빈 목록이다.
+1. lines, symbol: 그 제약이 걸리는 줄(operational_lines 안의 줄)과 그 줄의 핵심 심볼(코드에 적힌 이름). 짚을 줄이 없으면 그 제약은 만들지 않는다.
+2. assumption: 그 줄이 암묵적으로 믿는 조건 한 문장(예: "call_tool은 1.5초 안에 응답한다").
+3. rationale: 그 가정이 깨지면 그 줄이 왜 문제가 되는지 1~2문장. 화면에 보이지 않는다.
+4. label, situation: assumption을 깨는 바뀐 조건. 숫자가 분명하면 이 코드에 맞춘다(timeout=1.5면 "3초 지연").
+   숫자를 억지로 만들지 않는다(나쁜 예: "권한 오류 3회 발생").
+   label과 situation은 화면에서 역할이 다르므로 같은 말을 되풀이하지 않는다. 질문은 다음 단계에서 따로 만들므로 둘 다 묻지 않는다.
+   - label(버튼 이름): "무엇이 + 어떻게 바뀌는지"를 담은 20자 이내 명사구. 문장부호·"~요"·물음표를 쓰지 않는다.
+     좋은 예: "call_tool 응답 3초 지연", "users API 분당 60회 제한", "결제 API 간헐적 503"
+     나쁜 예: "팀 3명"(무엇이 바뀌는지 모름), "API 호출 지연 문제"(어떻게 바뀌는지 흐림), "타임아웃 발생"(결과)
+   - situation(설명): label을 고른 사람이 상황을 오해하지 않도록 어느 호출·입력이 언제·얼마나 바뀌는지 보태는 한 문장.
+     "~해요"로 끝낸다("~다"로 끝내지 않는다). 바깥 조건이 어떻게 바뀌었는지까지만 쓴다. 그래서 코드에 무슨 일이
+     생기는지(타임아웃돼요, 예외가 나요, 대기열이 길어져요, 병목 등)나 "~할 수 있어요" 같은 예측, 고칠 방법은 쓰지 않는다.
+     그건 사용자가 답할 내용이다.
+     좋은 예: "plan_tools가 고른 tool 중 하나가 매번 3초 뒤에야 응답해요."
+     나쁜 예: "call_tool 응답 3초 지연."(label 반복), "3초가 걸리면 타임아웃이 발생할 수 있어요."(결과)
+"""
 
 COACH_SCENARIO_PROMPT = f"""\
-너는 설계 판단을 가르치는 코치다. 코드에 제약 하나(<preset>)를 주입했을 때 무엇이 깨지거나 바뀌는지
+너는 설계 판단을 가르치는 코치다. 코드에 제약 하나(<constraint>)를 주입했을 때 무엇이 깨지거나 바뀌는지
 사용자가 스스로 생각하게 하는 질문을 하나 만든다. 한국어 존댓말(~해요)로 쓴다. {DATA_NOTICE}
 
-- question: <preset> 상황에서 이 코드의 구체적인 줄·호출(<code>, <steps>)이 어떻게 동작할지 묻는 질문 하나.
-  "이 코드에서 ~하면 ~는 어떻게 될까요?"처럼 코드에 붙여 묻는다. 물음표는 문장 끝에 하나만 쓴다.
-  여러 질문을 묶지 않는다.
+화면에는 제약 이름(label)이 버튼으로, 상황 설명(situation)이 질문 바로 위에 이미 보인다. 질문은 이 둘과 역할이 다르다.
+- question(질문 타이틀): <constraint> 상황에서 "걸리는 곳"의 줄·호출(<code>, <steps>)이 어떻게 동작할지 묻는 질문 하나.
+  상황을 다시 설명하지 말고 "그 상황에서 코드가 어떻게 되는가"만 묻는다. 줄 번호나 심볼을 넣어 코드에 붙여 묻는다.
+  물음표는 문장 끝에 하나만 쓴다. 여러 질문을 묶지 않는다. 제약과 상관없는 일반 질문(코드 스타일, 가독성 등)을 하지 않는다.
+  좋은 예: "19줄 wait_for의 timeout=1.5에서 call_tool 하나가 3초 걸리면 run_tools는 어떤 결과를 돌려줄까요?"
+  나쁜 예: "call_tool 응답이 3초 지연되는 상황이에요. 어떻게 될까요?"(상황 반복),
+  "call_with_retry의 예외 처리가 명확하게 구분되어 있나요?"(제약과 무관한 질문)
 - follow_up: 질문 아래 붙는 짧은 안내 한 문장(60자 이내). 어디를 볼지만 말한다. 물음표를 쓰지 않는다.
   좋은 예: "call_with_retry의 재시도 부분을 살펴보세요."
 - hint: 막혔을 때 여는 힌트 1~2문장. follow_up보다 구체적으로, 볼 줄 번호·호출과 무엇을 비교하거나
@@ -178,7 +202,7 @@ COACH_SCENARIO_PROMPT = f"""\
 """
 
 COACH_MODEL_ANSWER_PROMPT = f"""\
-너는 설계 판단을 가르치는 코치다. <preset> 상황에서 <question>에 대한 모범 답변을 쓴다.
+너는 설계 판단을 가르치는 코치다. <constraint> 상황에서 <question>에 대한 모범 답변을 쓴다.
 한국어 존댓말(~해요)로 쓴다. {DATA_NOTICE}
 
 - answer: 3~5문장. 이 코드의 줄·호출을 들어 그 상황에서 무엇이 어떻게 달라지는지 먼저 설명하고,
@@ -225,30 +249,45 @@ def _steps_text(steps) -> str:
     )
 
 
-def scenario_input(code: str, facts: StaticFacts, preset: str, steps) -> str:
-    name, situation = PRESETS[preset]
+def constraints_input(code: str, facts: StaticFacts, steps) -> str:
     return (
-        f"<preset>{name}: {situation}</preset>\n"
         f"<code>\n{numbered_code(code)}\n</code>\n"
         f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
         f"<steps>\n{_steps_text(steps)}\n</steps>"
     )
 
 
-def model_answer_input(code: str, facts: StaticFacts, preset: str, question: str) -> str:
-    name, situation = PRESETS[preset]
+def _constraint_text(constraint) -> str:
+    """제약은 FE가 analyze 응답에서 받아 다시 보낸 값이라 데이터로만 넣는다."""
     return (
-        f"<preset>{name}: {situation}</preset>\n"
+        f"<constraint>\n{constraint.label}: {constraint.situation}\n"
+        f"걸리는 곳: {constraint.symbol} ({', '.join(map(str, constraint.lines))}번째 줄)\n"
+        f"깨지는 가정: {constraint.assumption}\n"
+        f"중요한 이유: {constraint.rationale}\n</constraint>"
+    )
+
+
+def scenario_input(code: str, facts: StaticFacts, constraint, steps) -> str:
+    return (
+        f"{_constraint_text(constraint)}\n"
+        f"<code>\n{numbered_code(code)}\n</code>\n"
+        f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
+        f"<steps>\n{_steps_text(steps)}\n</steps>"
+    )
+
+
+def model_answer_input(code: str, facts: StaticFacts, constraint, question: str) -> str:
+    return (
+        f"{_constraint_text(constraint)}\n"
         f"<code>\n{numbered_code(code)}\n</code>\n"
         f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
         f"<question>\n{question.strip()}\n</question>"
     )
 
 
-def feedback_input(code: str, facts: StaticFacts, preset: str, question: str, answer: str) -> str:
-    name, situation = PRESETS[preset]
+def feedback_input(code: str, facts: StaticFacts, constraint, question: str, answer: str) -> str:
     return (
-        f"<preset>{name}: {situation}</preset>\n"
+        f"{_constraint_text(constraint)}\n"
         f"<code>\n{numbered_code(code)}\n</code>\n"
         f"<facts>\n{facts.model_dump_json()}\n</facts>\n"
         f"<question>\n{question.strip()}\n</question>\n"
@@ -278,8 +317,11 @@ def _decision_text(item) -> str:
 
 
 def _application_text(item) -> str:
-    name, _ = PRESETS[item.preset]
-    lines = [f"[apply:{item.preset}] 조건 {name}", f"  질문: {item.question.strip()}"]
+    constraint = item.constraint
+    lines = [
+        f"[apply:{constraint.id}] 조건 {constraint.label}: {constraint.situation}",
+        f"  질문: {item.question.strip()}",
+    ]
     lines.append(f"  내 답: {item.answer.strip() or '쓰지 않음'}")
     if item.feedback:
         lines.append(f"  피드백: {item.feedback.verdict} 아쉬운 점: {item.feedback.further}")

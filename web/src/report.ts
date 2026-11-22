@@ -2,17 +2,16 @@
 // 같은 데이터로 Markdown과 단독 HTML 보고서(서비스 다크 톤)를 만든다.
 import type {
   AnalyzeResponse,
+  Constraint,
   DecisionPoint,
   FeedbackResponse,
-  Preset,
   ScenarioResponse,
   SummaryResponse,
   Verdict,
 } from "./api/client";
 
 export type ReportApplication = {
-  preset: Preset;
-  presetName: string;
+  constraint: Constraint;
   scenario: ScenarioResponse;
   answer: string;
   feedback: FeedbackResponse | null;
@@ -49,7 +48,7 @@ export function reportFileName(data: ReportData, ext: "md" | "html"): string {
   return `ai-code-decoder-${formatDate(data.createdAt).replace(/[-: ]/g, "").slice(0, 12)}.${ext}`;
 }
 
-// 핵심 정리의 ref("step:2", "decision:dp1", "apply:latency")를 사람이 읽는 이름으로 바꾼다.
+// 핵심 정리의 ref("step:2", "decision:dp1", "apply:k1")를 사람이 읽는 이름으로 바꾼다.
 function refLabel(data: ReportData, ref: string): string {
   const [kind, id] = ref.split(":");
   if (kind === "step") {
@@ -60,8 +59,8 @@ function refLabel(data: ReportData, ref: string): string {
     const index = data.decisions.findIndex((d) => d.dp.id === id);
     return index >= 0 ? `설계 포인트 ${index + 1}` : ref;
   }
-  const app = data.applications.find((a) => a.preset === id);
-  return app ? `설계 응용 · ${app.presetName}` : ref;
+  const app = data.applications.find((a) => a.constraint.id === id);
+  return app ? `설계 응용 · ${app.constraint.label}` : ref;
 }
 
 const optionLabel = (dp: DecisionPoint, id: string) => dp.options.find((o) => o.id === id)?.label ?? id;
@@ -128,7 +127,7 @@ export function buildMarkdown(data: ReportData): string {
   if (data.applications.length) {
     out.push(`## ${data.decisions.length ? 3 : 2}. 설계 응용`, "");
     for (const app of data.applications) {
-      out.push(`### ${app.presetName}`, "", `**질문:** ${app.scenario.question}`, "");
+      out.push(`### ${app.constraint.label}`, "", `> ${app.constraint.situation}`, "", `**질문:** ${app.scenario.question}`, "");
       out.push(`**내 답:** ${app.answer.trim() || "작성하지 않음"}`, "");
       if (app.feedback) {
         out.push(`**피드백:** ${app.feedback.verdict}`, "");
@@ -243,7 +242,8 @@ export function buildHtml(data: ReportData): string {
               ? `<div class="block"><span class="label">모범 답변</span><p>${esc(app.modelAnswer)}</p></div>`
               : "";
             return `<article class="card apply">
-  <div class="card-head"><span class="badge accent">${esc(app.presetName)}</span></div>
+  <div class="card-head"><span class="badge accent">${esc(app.constraint.label)}</span></div>
+  <p class="muted">${esc(app.constraint.situation)}</p>
   <h3>${esc(app.scenario.question)}</h3>
   <div class="block"><span class="label">내 답</span><p>${app.answer.trim() ? esc(app.answer.trim()) : '<span class="muted">작성하지 않음</span>'}</p></div>
   ${feedback}${model}

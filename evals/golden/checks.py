@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from server.models import AudienceLevel, OptionId, Preset
+from server.models import MAX_CONSTRAINTS, AudienceLevel, OptionId
 
 GOLDEN_DIR = Path(__file__).resolve().parent
 CASES_FILE = GOLDEN_DIR / "cases.jsonl"
@@ -30,6 +30,7 @@ class AnalyzeExpect(_Strict):
     min_decision_points: int = 0
     decision_lines: list[int] = Field(default_factory=list)  # 이 줄 중 하나를 가리키는 결정 지점
     official_symbols: list[str] = Field(default_factory=list)  # 공식 문서 배지가 붙어야 할 심볼
+    constraints: tuple[int, int] = (0, MAX_CONSTRAINTS)  # 제약 수 범위. (0, 0)이면 건너뛰기 기대
 
 
 class JudgeCase(_Strict):
@@ -41,7 +42,7 @@ class JudgeCase(_Strict):
 
 
 class ScenarioCase(_Strict):
-    preset: Preset
+    constraint_keywords: list[str]  # 이 중 하나가 label에 들어간 첫 제약으로 질문을 만든다
     keywords: list[str]  # 질문에 이 중 하나는 들어가야 한다
     answer: str
     min_points: int = 0
@@ -105,6 +106,26 @@ def check_analyze(body: dict[str, Any], expect: AnalyzeExpect) -> Failures:
     return failures
 
 
+def check_constraints(body: dict[str, Any], expect: AnalyzeExpect) -> Failures:
+    constraints = body["constraints"]
+    low, high = expect.constraints
+    if not low <= len(constraints) <= high:
+        labels = [c["label"] for c in constraints]
+        return [f"제약 {len(constraints)}개(기대 {low}~{high}): {labels}"]
+    return []
+
+
+def find_constraint(body: dict[str, Any], case: ScenarioCase) -> dict[str, Any] | None:
+    return next(
+        (
+            c
+            for c in body["constraints"]
+            if any(keyword in c["label"] for keyword in case.constraint_keywords)
+        ),
+        None,
+    )
+
+
 def check_judge(body: dict[str, Any], case: JudgeCase) -> Failures:
     failures: Failures = []
     conditions = body["conditions"]
@@ -131,7 +152,7 @@ def check_scenario(body: dict[str, Any], case: ScenarioCase) -> Failures:
     if question.count("?") != 1:
         failures.append(f"질문의 물음표 {question.count('?')}개")
     if not any(keyword in question for keyword in case.keywords):
-        failures.append(f"질문에 프리셋 단서({', '.join(case.keywords)})가 없음")
+        failures.append(f"질문에 제약 단서({', '.join(case.keywords)})가 없음")
     return failures
 
 

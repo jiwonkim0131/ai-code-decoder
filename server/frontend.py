@@ -11,6 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 
 DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+NO_CACHE = "no-cache"
+IMMUTABLE = "public, max-age=31536000, immutable"
 
 
 def install_frontend(app: FastAPI, dist: Path = DIST) -> None:
@@ -28,5 +30,12 @@ def install_frontend(app: FastAPI, dist: Path = DIST) -> None:
             return response
         file = (root / path.lstrip("/")).resolve()
         if file.is_file() and root in file.parents:
-            return FileResponse(file)
-        return FileResponse(index)  # 클라이언트 라우팅은 index.html이 맡는다
+            # 빌드 산출물(assets/)은 파일 이름에 해시가 있어 내용이 바뀌지 않는다.
+            cache = IMMUTABLE if path.startswith("/assets/") else NO_CACHE
+            return FileResponse(file, headers={"Cache-Control": cache})
+        if path.startswith("/assets/"):
+            # 이전 배포의 index.html이 지난 해시의 JS를 찾으면 HTML이 아니라 404를 준다
+            # (HTML을 주면 브라우저가 모듈 MIME 오류를 내며 흰 화면이 된다).
+            return response
+        # 클라이언트 라우팅은 index.html이 맡는다. 배포마다 새 해시를 가리키니 매번 다시 확인한다.
+        return FileResponse(index, headers={"Cache-Control": NO_CACHE})

@@ -42,6 +42,40 @@ _LEVEL_HINTS: dict[str, str] = {
     ),
 }
 
+# 계산·변환만 하는 모듈. 이 호출만 있는 코드는 운영 조건이 바뀌어도 다시 설계할 곳이 없다고 본다.
+# builtins의 open도 여기 든다(설정 파일 한 번 읽는 정도로는 설계 응용 제약을 만들지 않는다).
+# 모르는 모듈(서드파티, 사용자 패키지)은 외부 호출일 수 있으므로 운영 호출로 본다.
+_COMPUTATION_MODULES = frozenset(
+    {
+        "base64",
+        "bisect",
+        "builtins",
+        "cmath",
+        "collections",
+        "copy",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "enum",
+        "fractions",
+        "functools",
+        "hashlib",
+        "heapq",
+        "itertools",
+        "json",
+        "math",
+        "operator",
+        "pprint",
+        "random",
+        "re",
+        "statistics",
+        "string",
+        "textwrap",
+        "typing",
+        "uuid",
+    }
+)
+
 _PYTHON_HINTS = (
     "코드는 Python 3다. async/await, asyncio(gather, TaskGroup, wait_for), "
     "컨텍스트 매니저, 제너레이터처럼 Python에서 설계 결정이 갈리는 관용구를 우선 살핀다."
@@ -303,3 +337,12 @@ class PythonAdapter:
 
     def prompt_hints(self, level: AudienceLevel) -> str:
         return f"{_PYTHON_HINTS}\n{_LEVEL_HINTS[level]}"
+
+    def operational_lines(self, facts: StaticFacts) -> set[int]:
+        # 해석하지 못한 호출(파일 안 함수, 변수의 메서드)은 그 안·앞의 호출이 이미 잡히므로 뺀다.
+        return {
+            line
+            for call in facts.calls
+            if call.resolved and call.module not in _COMPUTATION_MODULES
+            for line in call.lines
+        }

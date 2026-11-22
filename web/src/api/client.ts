@@ -14,7 +14,7 @@ export type ScenarioResponse = S["ScenarioResponse"];
 export type FeedbackResponse = S["FeedbackResponse"];
 export type SummaryRequest = S["SummaryRequest"];
 export type SummaryResponse = S["SummaryResponse"];
-export type Preset = ScenarioResponse["preset"];
+export type Constraint = S["Constraint"];
 export type Level = NonNullable<AnalyzeRequest["level"]>;
 export type OptionId = DecisionPoint["codeOption"];
 
@@ -103,12 +103,14 @@ export const api = {
   scan: (code: string) => post<S["ScanResponse"]>("/api/scan", { code }),
   analyze: (body: AnalyzeRequest) => post<AnalyzeResponse>("/api/analyze", body),
   judge: (body: JudgeRequest) => post<Verdict>("/api/judge", body),
-  scenario: (code: string, preset: Preset, steps: Step[]) =>
-    cachedPost<ScenarioResponse>("/api/scenario", { code, preset, steps }),
-  feedback: (code: string, preset: Preset, question: string, answer: string) =>
-    post<FeedbackResponse>("/api/feedback", { code, preset, question, answer }),
-  modelAnswer: (code: string, preset: Preset, question: string) =>
-    cachedPost<S["ModelAnswerResponse"]>("/api/model-answer", { code, preset, question }),
+  constraints: (code: string, steps: Step[]) =>
+    cachedPost<S["ConstraintsResponse"]>("/api/constraints", { code, steps }),
+  scenario: (code: string, constraint: Constraint, steps: Step[]) =>
+    cachedPost<ScenarioResponse>("/api/scenario", { code, constraint, steps }),
+  feedback: (code: string, constraint: Constraint, question: string, answer: string) =>
+    post<FeedbackResponse>("/api/feedback", { code, constraint, question, answer }),
+  modelAnswer: (code: string, constraint: Constraint, question: string) =>
+    cachedPost<S["ModelAnswerResponse"]>("/api/model-answer", { code, constraint, question }),
   // 같은 학습 기록이면 같은 정리를 쓴다(기록이 바뀌면 키가 달라져 새로 만든다).
   summary: (body: SummaryRequest) => cachedPost<SummaryResponse>("/api/summary", body),
 };

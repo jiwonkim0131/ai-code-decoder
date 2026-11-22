@@ -1,7 +1,8 @@
 """골든 샘플 평가: `python -m evals.golden [--case ID] [--save]`.
 
 실제 OpenAI를 부르므로 비용이 든다(.env의 OPENAI_API_KEY). 앱을 프로세스 안에서 띄워 FE와 같은
-경로(/api/analyze → judge → scenario → feedback)로 부르고, checks.py의 규칙으로 확인한다.
+경로(/api/analyze → judge → constraints → scenario → feedback)로 부르고, checks.py의 규칙으로
+확인한다.
 `--save`를 주면 응답을 evals/golden/out/<case>/에 저장한다(FE 개발용 fixture로 쓸 수 있다).
 실패한 검사가 하나라도 있으면 종료 코드 1이다.
 """
@@ -19,9 +20,11 @@ from evals.golden.checks import (
     GOLDEN_DIR,
     GoldenCase,
     check_analyze,
+    check_constraints,
     check_feedback,
     check_judge,
     check_scenario,
+    find_constraint,
     load_cases,
 )
 
@@ -97,19 +100,34 @@ def run_case(client, case: GoldenCase, report: Report, save: bool) -> None:
         if save and status == 200:
             _save(case.case_id, f"judge-{index}", {"request": body, "response": verdict})
 
+    body = {"code": code, "steps": analysis["steps"]}
+    status, constraints, seconds = _post(client, "/api/constraints", body)
+    if status != 200:
+        report.add(case.case_id, "constraints", seconds, [f"HTTP {status}: {constraints}"])
+        return
+    report.add(case.case_id, "constraints", seconds, check_constraints(constraints, case.expect))
+    if save:
+        _save(case.case_id, "constraints", {"request": body, "response": constraints})
+
     for scenario_case in case.scenarios:
-        preset = scenario_case.preset
-        body = {"code": code, "preset": preset, "steps": analysis["steps"]}
+        constraint = find_constraint(constraints, scenario_case)
+        if constraint is None:
+            labels = [c["label"] for c in constraints["constraints"]]
+            name = f"scenario: {'/'.join(scenario_case.constraint_keywords)}"
+            report.add(case.case_id, name, 0.0, [f"맞는 제약이 없음(제약: {labels})"])
+            continue
+        cid = constraint["id"]
+        body = {"code": code, "constraint": constraint, "steps": analysis["steps"]}
         status, scenario, seconds = _post(client, "/api/scenario", body)
         if status != 200:
-            report.add(case.case_id, f"scenario: {preset}", seconds, [f"HTTP {status}: {scenario}"])
+            report.add(case.case_id, f"scenario: {cid}", seconds, [f"HTTP {status}: {scenario}"])
             continue
         report.add(
-            case.case_id, f"scenario: {preset}", seconds, check_scenario(scenario, scenario_case)
+            case.case_id, f"scenario: {cid}", seconds, check_scenario(scenario, scenario_case)
         )
         feedback_body = {
             "code": code,
-            "preset": preset,
+            "constraint": constraint,
             "question": scenario["question"],
             "answer": scenario_case.answer,
         }
@@ -119,13 +137,13 @@ def run_case(client, case: GoldenCase, report: Report, save: bool) -> None:
             if status != 200
             else check_feedback(feedback, scenario_case)
         )
-        report.add(case.case_id, f"feedback: {preset}", seconds, failures)
+        report.add(case.case_id, f"feedback: {cid}", seconds, failures)
         if save:
-            _save(case.case_id, f"scenario-{preset}", {"request": body, "response": scenario})
+            _save(case.case_id, f"scenario-{cid}", {"request": body, "response": scenario})
             if status == 200:
                 _save(
                     case.case_id,
-                    f"feedback-{preset}",
+                    f"feedback-{cid}",
                     {"request": feedback_body, "response": feedback},
                 )
 

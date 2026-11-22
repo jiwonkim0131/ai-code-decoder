@@ -123,6 +123,38 @@ class JudgeDraft(_Draft):
 # --- 코치(Coach) --------------------------------------------------------
 
 
+class DraftConstraint(_Draft):
+    # 근거(줄·심볼·가정·이유)를 이름보다 먼저 쓰게 해서, 코드에 걸 곳이 없는 제약을 만들지 않고
+    # 코드에 이미 있는 설정이 아니라 "바뀐 조건"을 쓰게 한다.
+    lines: list[int] = Field(description="이 제약이 걸리면 동작이 달라지는 줄 번호들")
+    symbol: str = Field(description="그 줄의 핵심 심볼. 코드에 실제로 적힌 이름")
+    assumption: str = Field(
+        description="이 코드가 그 줄에서 암묵적으로 가정한 운영 조건 한 문장"
+        "(예: call_tool은 1.5초 안에 응답한다)"
+    )
+    rationale: str = Field(
+        description="그 가정이 깨지면 그 줄이 왜 문제가 되거나 다시 설계해야 하는지 1~2문장"
+    )
+    id: str = Field(description="k1, k2, ...")
+    label: str = Field(
+        description="칩에 보일 버튼 이름. 무엇이 어떻게 바뀌는지 담은 20자 이내 명사구"
+    )
+    situation: str = Field(
+        description="가정이 어떻게 깨졌는지 보태는 한 문장. '~해요'로 끝내고 결과·정답은 쓰지 않음"
+    )
+
+
+class ConstraintsDraft(_Draft):
+    # 제약보다 먼저 쓰게 해서, 걸 곳이 없는 코드(단순 계산·변환)는 빈 목록으로 끝나게 한다.
+    operational_lines: list[int] = Field(
+        description="외부 호출(네트워크·API·DB·파일), 동시 실행, 재시도·타임아웃, 공유 자원 관리가 "
+        "실제로 있는 줄 번호들. 없으면 빈 목록"
+    )
+    constraints: list[DraftConstraint] = Field(
+        description="바꿔 볼 제약 0~5개. 코드에 실제로 걸 곳이 있을 때만. 없으면 빈 목록"
+    )
+
+
 class ScenarioDraft(_Draft):
     question: str = Field(description="실패 주입 질문. 물음표는 끝에 하나만")
     follow_up: str = Field(description="질문 아래 짧은 안내 한 문장(60자 이내). 어디를 볼지만")

@@ -14,12 +14,22 @@ from __future__ import annotations
 import re
 
 from server.agents.context import AnalystContext
-from server.agents.schemas import AnalysisDraft, DraftEvidence, DraftStep
+from server.agents.schemas import (
+    AnalysisDraft,
+    ConstraintsDraft,
+    DraftConstraint,
+    DraftEvidence,
+    DraftStep,
+)
+from server.intake import CheckedCode
 from server.models import (
+    MAX_CONSTRAINTS,
     MAX_STEPS,
     AnalyzeMeta,
     AnalyzeResponse,
     Condition,
+    Constraint,
+    ConstraintsResponse,
     DecisionPoint,
     Evidence,
     Option,
@@ -32,7 +42,14 @@ MIN_CONDITIONS = 2
 # 호출이 이만큼 여러 줄에 있으면 단계 하나로 뭉치지 않게 한다(게으른 출력·주석 속 지시 대응)
 MIN_CALL_LINES_FOR_SPLIT = 3
 OPTION_IDS = ("A", "B", "C", "D")
+CONSTRAINT_LABEL_MAX_CHARACTERS = 24
+# 상황 설명에 쓰면 사용자가 답할 결과를 미리 말하게 되는 표현
+_RESULT_PHRASES = ("수 있어요", "타임아웃돼", "타임아웃이 나", "대기열", "병목")
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_SENTENCE_END = re.compile(r"[.!?](?=\s|$)")  # 1.5 같은 숫자의 점은 세지 않는다
+# 합니다·됩니다·습니다·입니다처럼 '~니다/~니까'로 끝나는 문장(하십시오체)
+FORMAL_ENDING = re.compile(r"니(다|까)[.!?]?(?=\s|$)")
 
 DOWNGRADED_NOTE = "공식 문서에서 이 심볼을 정확히 찾지 못해 추정으로 표시했어요."
 UNAVAILABLE_NOTE = "공식 문서를 지금 확인하지 못했어요. 문서 링크를 직접 확인해 주세요."
@@ -48,6 +65,11 @@ class VerificationError(ValueError):
         return "\n".join(f"- {error}" for error in self.errors)
 
 
+def sentence_count(text: str) -> int:
+    text = text.strip()
+    return len(_SENTENCE_END.findall(text)) or (1 if text else 0)
+
+
 def _code_identifiers(code: str) -> set[str]:
     return set(_IDENTIFIER.findall(code))
 
@@ -59,7 +81,7 @@ def _symbol_in_code(symbol: str, code: str, identifiers: set[str]) -> bool:
     return bool(names) and all(name in identifiers for name in names)
 
 
-def _symbol_hint(lines: list[int], ctx: AnalystContext) -> str:
+def _symbol_hint(lines: list[int], ctx: AnalystContext | CheckedCode) -> str:
     """수정 요청에 붙일 후보: 그 단계 줄에 실제로 있는 호출·정의 이름."""
     wanted = set(lines)
     names = [call.name for call in ctx.facts.calls if wanted & set(call.lines)]
@@ -270,4 +292,132 @@ def verify_analysis(
         steps=steps,
         decision_points=decision_points,
         meta=AnalyzeMeta(model=model, tool_calls=ctx.tool_calls()),
+    )
+
+
+# --- 제약(POST /api/constraints) ----------------------------------------
+
+
+def _constraint_grounding_errors(
+    constraint: DraftConstraint,
+    checked: CheckedCode,
+    code: str,
+    identifiers: set[str],
+    operational: set[int],
+) -> list[str]:
+    """코드에 걸 곳이 있는 제약인지 본다."""
+    where = f"제약 {constraint.id}"
+    errors: list[str] = []
+    _check_lines(where, constraint.lines, checked.facts.line_count, errors)
+    if not operational & set(constraint.lines):
+        errors.append(
+            f"{where}의 lines {constraint.lines}가 operational_lines {sorted(operational)}에 "
+            "없습니다. 외부 호출·동시성·재시도·자원 관리가 있는 줄에 걸리는 제약만 쓰고, "
+            "없으면 빼세요."
+        )
+    if checked.adapter.capabilities.static_verification and not _symbol_in_code(
+        constraint.symbol, code, identifiers
+    ):
+        errors.append(
+            f"{where}의 symbol '{constraint.symbol}'이 코드에 없습니다. 제약이 걸리는 줄의 "
+            "이름을 쓰고, 코드에 걸 곳이 없는 제약이면 빼세요"
+            f"{_symbol_hint(constraint.lines, checked)}."
+        )
+    for field in ("assumption", "rationale", "label", "situation"):
+        if not getattr(constraint, field).strip():
+            errors.append(f"{where}의 {field}이 비어 있습니다.")
+    return errors
+
+
+def _constraint_wording_errors(constraint: DraftConstraint, code: str) -> list[str]:
+    """버튼 이름(label)과 상황 설명(situation)이 제 역할만 하는지 본다."""
+    where = f"제약 {constraint.id}"
+    errors: list[str] = []
+    label, situation = constraint.label.strip(), constraint.situation.strip()
+    # 그 줄에 이미 적힌 값(timeout=5, Semaphore(5))을 라벨에 쓰면 바뀐 조건이 아니라 코드 설명이다.
+    # 코드 전체로 넓히면 retries=3이 있는 코드의 "응답 3초 지연"처럼 단위가 다른 값까지 걸린다.
+    code_lines = code.splitlines()
+    written = {
+        number
+        for line in constraint.lines
+        if 1 <= line <= len(code_lines)
+        for number in _NUMBER.findall(code_lines[line - 1])
+    }
+    same = [number for number in _NUMBER.findall(label) if number in written]
+    if same:
+        errors.append(
+            f"{where}의 label '{label}'의 {', '.join(same)}은 코드에 이미 적힌 값입니다. "
+            "코드 설명이 아니라, 그 값이 버티지 못하게 바뀐 바깥 조건"
+            "(예: timeout=1.5면 '응답 3초 지연')을 쓰세요."
+        )
+    if len(label) > CONSTRAINT_LABEL_MAX_CHARACTERS or _SENTENCE_END.search(label):
+        errors.append(
+            f"{where}의 label '{label}'은 버튼 이름입니다. 문장부호 없는 "
+            f"{CONSTRAINT_LABEL_MAX_CHARACTERS}자 이내 명사구로 쓰세요(현재 {len(label)}자)."
+        )
+    if "?" in situation or sentence_count(situation) > 1:
+        errors.append(
+            f"{where}의 situation은 물음표 없는 한 문장이어야 합니다. "
+            "질문은 다음 단계에서 따로 만듭니다."
+        )
+    elif situation.rstrip(".") == label:
+        errors.append(f"{where}의 situation이 label과 같습니다. label에 없는 배경·범위를 보태세요.")
+    results = [phrase for phrase in _RESULT_PHRASES if phrase in situation]
+    if results:
+        errors.append(
+            f"{where}의 situation에 결과 표현({', '.join(results)})이 있습니다. 바깥 조건이 어떻게 "
+            "바뀌었는지까지만 쓰고, 코드에 무슨 일이 생기는지는 사용자가 답하게 두세요."
+        )
+    if not situation.rstrip(".").endswith("요"):
+        errors.append(f"{where}의 situation '{situation}'을 '~해요' 말투로 끝내세요.")
+    return errors
+
+
+def verify_constraints(
+    draft: ConstraintsDraft, checked: CheckedCode, code: str, first_try: bool = True
+) -> ConstraintsResponse:
+    """첫 출력은 근거·문구 오류를 모두 돌려보내 고치게 한다. 고친 출력에서는 오류로 실패시키지
+    않고 검사를 모두 통과한 제약만 남긴다. 설계 응용은 선택 단계라, 억지스럽거나 문구가 어긋난
+    제약을 보여 주느니 0개로 건너뛰는 편이 낫다."""
+    identifiers = _code_identifiers(code)
+    operational = checked.adapter.operational_lines(checked.facts)
+    if operational is None:  # 정적 분석으로 가를 수 없는 언어는 모델이 고른 줄을 쓴다
+        operational = {
+            line for line in draft.operational_lines if 1 <= line <= checked.facts.line_count
+        }
+    if first_try:
+        errors: list[str] = []
+        ids = [c.id for c in draft.constraints]
+        if len(set(ids)) != len(ids):
+            errors.append(f"제약 id가 중복됩니다: {ids}")
+        labels = [c.label.strip() for c in draft.constraints]
+        if len(set(labels)) != len(labels):
+            errors.append(f"제약 label이 중복됩니다: {labels}")
+        for c in draft.constraints:
+            errors += _constraint_grounding_errors(c, checked, code, identifiers, operational)
+            errors += _constraint_wording_errors(c, code)
+        if errors:
+            raise VerificationError(errors)
+    kept: list[DraftConstraint] = []
+    for c in draft.constraints:
+        duplicate = any(k.id == c.id or k.label.strip() == c.label.strip() for k in kept)
+        valid = not (
+            _constraint_grounding_errors(c, checked, code, identifiers, operational)
+            or _constraint_wording_errors(c, code)
+        )
+        if not duplicate and valid:
+            kept.append(c)
+    return ConstraintsResponse(
+        constraints=[
+            Constraint(
+                id=c.id.strip(),
+                label=c.label.strip(),
+                situation=c.situation.strip(),
+                lines=sorted(set(c.lines)),
+                symbol=c.symbol.strip(),
+                assumption=c.assumption.strip(),
+                rationale=c.rationale.strip(),
+            )
+            for c in kept[:MAX_CONSTRAINTS]
+        ]
     )

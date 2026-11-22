@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.fakes import decision_point, final, input_text, step
+from tests.fakes import constraint, decision_point, final, input_text, step
 
 VERDICT = {
     "skipped": False,
@@ -38,7 +38,7 @@ BODY = {
     "decisions": [{"decisionPoint": decision_point(), "verdict": VERDICT}],
     "applications": [
         {
-            "preset": "latency",
+            "constraint": constraint(),
             "question": "tool 하나가 3초 걸리면 어떻게 될까요?",
             "answer": "전체가 3초 걸려요",
             "feedback": {"verdict": "좋아요", "points": [], "further": "타임아웃도 보세요."},
@@ -49,7 +49,7 @@ SUMMARY = {
     "takeaways": [
         {"text": "9줄 gather는 가장 느린 호출만큼 기다려요.", "refs": ["step:2"]},
         {"text": "return_exceptions=True라 실패해도 나머지 결과를 써요.", "refs": ["decision:dp1"]},
-        {"text": "지연이 큰 tool에는 타임아웃이 필요해요.", "refs": ["apply:latency", "step:2"]},
+        {"text": "지연이 큰 tool에는 타임아웃이 필요해요.", "refs": ["apply:k1", "step:2"]},
     ],
     "review_points": ["부분 실패 허용 기준을 다시 보세요."],
 }
@@ -68,7 +68,7 @@ def test_summary_uses_learning_record_and_returns_takeaways(client, scripted_mod
     assert "[step:2] 2단계 (asyncio.gather, 9번째 줄)" in text
     assert "내 선택: asyncio.TaskGroup (이유: 실패하면 바로 멈추고 싶어서)" in text
     assert "부분 실패 허용: 미반영" in text
-    assert "[apply:latency] 조건 tool 하나 3초 지연" in text
+    assert "[apply:k1] 조건 call_tool 응답 3초 지연: plan_tools가 고른 tool" in text
 
 
 def test_summary_refs_must_exist_in_the_record(client, scripted_model):
