@@ -1,4 +1,4 @@
-# AI Code Decoder
+# AI Code Tutor
 
 AI가 짜 준 Python 코드를 붙여넣으면 흐름을 단계로 설명하고, 설계 결정 지점에서 사용자가 먼저 판단해 보게 하는 학습 웹앱이다. FastAPI 서버 하나가 OpenAI Agents SDK 에이전트(분석·판정·코치)를 JSON API로 내놓고, React SPA가 5단계 학습 화면을 그린다. 서버는 아무것도 저장하지 않는다.
 
@@ -46,22 +46,22 @@ LLM 비용이 드는 엔드포인트라 기본은 닫혀 있고, 요청마다 `A
 
 ```bash
 # Claude Code
-claude mcp add --transport http ai-code-decoder https://<배포 도메인>/mcp \
+claude mcp add --transport http ai-code-tutor https://<배포 도메인>/mcp \
   --header "Authorization: Bearer <토큰>"
 ```
 
 ```toml
-# Codex CLI (~/.codex/config.toml). 토큰은 환경변수 AI_CODE_DECODER_TOKEN에 둔다
-[mcp_servers.ai-code-decoder]
+# Codex CLI (~/.codex/config.toml). 토큰은 환경변수 AI_CODE_TUTOR_TOKEN에 둔다
+[mcp_servers.ai-code-tutor]
 url = "https://<배포 도메인>/mcp"
-bearer_token_env_var = "AI_CODE_DECODER_TOKEN"
+bearer_token_env_var = "AI_CODE_TUTOR_TOKEN"
 ```
 
 ```jsonc
 // Cursor (~/.cursor/mcp.json) 등 JSON 설정을 쓰는 클라이언트
 {
   "mcpServers": {
-    "ai-code-decoder": {
+    "ai-code-tutor": {
       "url": "https://<배포 도메인>/mcp",
       "headers": { "Authorization": "Bearer <토큰>" }
     }

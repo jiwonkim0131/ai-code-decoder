@@ -1,1 +1,1 @@
-"""AI Code Decoder 서버 패키지."""
+"""AI Code Tutor 서버 패키지."""

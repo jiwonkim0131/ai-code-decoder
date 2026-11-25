@@ -1,5 +1,5 @@
 [project]
-name = "ai-code-decoder"
+name = "ai-code-tutor"
 version = "0.1.0"
 description = "AI가 짜 준 코드의 흐름과 설계 결정을 학습하는 웹앱 (FastAPI + OpenAI Agents SDK)"
 requires-python = ">=3.12,<3.13"

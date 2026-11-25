@@ -45,7 +45,7 @@ function formatDate(date: Date): string {
 }
 
 export function reportFileName(data: ReportData, ext: "md" | "html"): string {
-  return `ai-code-decoder-${formatDate(data.createdAt).replace(/[-: ]/g, "").slice(0, 12)}.${ext}`;
+  return `ai-code-tutor-${formatDate(data.createdAt).replace(/[-: ]/g, "").slice(0, 12)}.${ext}`;
 }
 
 // 핵심 정리의 ref("step:2", "decision:dp1", "apply:k1")를 사람이 읽는 이름으로 바꾼다.
@@ -275,11 +275,11 @@ export function buildHtml(data: ReportData): string {
 <body>
 <main class="report">
   <header class="cover">
-    <div class="brand"><span class="brand-mark">&lt;/&gt;</span><span>AI Code Decoder</span></div>
+    <div class="brand"><span class="brand-mark">&lt;/&gt;</span><span>AI Code Tutor</span></div>
     <div class="title-row"><h1>학습 결과 요약</h1><time>${esc(formatDate(data.createdAt))}</time></div>
   </header>
   ${parts.join("\n")}
-  <footer class="foot">AI Code Decoder로 만든 학습 정리예요. 핵심 정리는 AI가 학습 기록을 바탕으로 썼어요.</footer>
+  <footer class="foot">AI Code Tutor로 만든 학습 정리예요. 핵심 정리는 AI가 학습 기록을 바탕으로 썼어요.</footer>
 </main>
 </body>
 </html>

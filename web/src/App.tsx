@@ -467,14 +467,14 @@ export default function App() {
               <span className="brand-mark" aria-hidden="true">
                 &lt;/&gt;
               </span>
-              <strong>AI Code Decoder</strong>
+              <strong>AI Code Tutor</strong>
             </div>
           ) : (
             <button className="brand brand-button" aria-label="코드 입력으로 돌아가기" onClick={() => setRestartDialog(true)}>
               <span className="brand-mark" aria-hidden="true">
                 &lt;/&gt;
               </span>
-              <strong>AI Code Decoder</strong>
+              <strong>AI Code Tutor</strong>
             </button>
           )}
           <nav className="stepnav" aria-label="학습 단계">

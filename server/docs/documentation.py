@@ -259,7 +259,7 @@ def _title(project: str, module: str, symbol: str) -> str:
 
 
 def _download(url: str, limit: int) -> bytes:
-    request = Request(url, headers={"User-Agent": "AI-Code-Decoder/1.0"})
+    request = Request(url, headers={"User-Agent": "AI-Code-Tutor/1.0"})
     with urlopen(request, timeout=_FETCH_TIMEOUT_SECONDS) as response:
         return response.read(limit)
 
