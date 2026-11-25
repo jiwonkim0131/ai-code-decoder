@@ -33,7 +33,60 @@ uv run uvicorn app:app --reload        # http://127.0.0.1:8000/api/health, /docs
 | `OPENAI_MODEL` | 에이전트가 쓰는 모델 이름 |
 | `ALLOWED_LANGS` | 분석 허용 언어(쉼표 구분). 기본 `python` |
 | `AGENT_TIMEOUT_SECONDS` | 요청 하나에서 에이전트 실행(수정 요청 포함)에 쓰는 최대 시간. 기본 `60`. 넘으면 502 `llm_unavailable` |
+| `MCP_TOKENS` | 원격 MCP(`/mcp`) 접속 토큰(쉼표로 여러 개). 사용자에게 나눠 준다. 비우면 `/mcp`가 닫힌다 |
+| `MCP_SEAL_KEY` | MCP 도구가 정답을 암호화하는 서버 비밀값. 사용자에게 주지 않는다. 비우면 `/mcp`가 닫힌다 |
 | `ENABLE_DEV_ROUTES` | `true`면 실측용 API(`POST /api/dev/agent-ping`, `POST /api/dev/lookup-docs`)를 연다. 배포에서는 `false` |
+
+## MCP로 연결하기 (로컬 에이전트에서 쓰기)
+
+`MCP_TOKENS`와 `MCP_SEAL_KEY`를 둘 다 넣으면 `https://<배포 도메인>/mcp`에 원격 MCP 서버(Streamable HTTP, stateless)가 열린다.
+LLM 비용이 드는 엔드포인트라 기본은 닫혀 있고, 요청마다 `Authorization: Bearer <토큰>`이 있어야 한다(없으면 401).
+사용자는 자기 컴퓨터의 MCP 클라이언트(Claude Code, Cursor, Codex CLI, Claude Desktop 등)에 이 주소를 등록하고,
+"`src/foo.py` 설명해 줘"처럼 말하면 된다. 서버는 로컬 파일을 읽지 않는다. 클라이언트가 파일을 읽어 `code`로 넘긴다.
+
+```bash
+# Claude Code
+claude mcp add --transport http ai-code-decoder https://<배포 도메인>/mcp \
+  --header "Authorization: Bearer <토큰>"
+```
+
+```toml
+# Codex CLI (~/.codex/config.toml). 토큰은 환경변수 AI_CODE_DECODER_TOKEN에 둔다
+[mcp_servers.ai-code-decoder]
+url = "https://<배포 도메인>/mcp"
+bearer_token_env_var = "AI_CODE_DECODER_TOKEN"
+```
+
+```jsonc
+// Cursor (~/.cursor/mcp.json) 등 JSON 설정을 쓰는 클라이언트
+{
+  "mcpServers": {
+    "ai-code-decoder": {
+      "url": "https://<배포 도메인>/mcp",
+      "headers": { "Authorization": "Bearer <토큰>" }
+    }
+  }
+}
+```
+
+로컬 개발 서버에 붙일 때는 `http://127.0.0.1:8000/mcp`를 쓴다.
+
+| 도구 | 하는 일 | 대응 API |
+| --- | --- | --- |
+| `scan_secrets` | 비밀값 후보 찾기(LLM 없음) | `/api/scan` |
+| `analyze_code` | 흐름 단계와 결정 지점 | `/api/analyze` |
+| `judge_answer` | 사용자 선택·이유 판정 | `/api/judge` |
+| `suggest_constraints` | 설계 응용 제약 고르기 | `/api/constraints` |
+| `make_scenario` | 바뀐 상황 질문 | `/api/scenario` |
+| `give_feedback` | 질문에 대한 답 평가 | `/api/feedback` |
+| `model_answer` | 모범 답 | `/api/model-answer` |
+| `summarize` | 핵심 정리 | `/api/summary` |
+
+도구는 `/api/*` 라우트 함수를 그대로 불러 입력 검사·시간 상한·로그·비용 상한이 같다. REST API와 다른 점은 정답 처리다.
+MCP 클라이언트는 도구 결과를 화면에서 펼쳐 볼 수 있어, 결정 지점의 `codeOption`·`conditions`와 제약의 `assumption`·`rationale`을
+평문으로 내보내지 않는다. 대신 `MCP_SEAL_KEY`로 암호화(Fernet, 24시간 만료)한 `key`를 주고, `judge_answer`·`make_scenario` 등은
+그 키만 받는다. 서버는 여전히 아무것도 저장하지 않고, 클라이언트는 키를 읽거나 고칠 수 없다.
+토큰은 사용자 구분 없이 같은 한도를 쓴다. 토큰이 새면 `MCP_TOKENS`에서 빼고 다시 배포한다.
 
 ## 배포 (Vercel)
 
@@ -48,7 +101,7 @@ Vercel이 루트의 `app.py`에서 FastAPI `app`을 찾는다. `vercel link` →
 배포 전에 손으로 해야 하는 것:
 
 - OpenAI 대시보드(Settings → Limits)에서 프로젝트 월 사용 한도를 건다. 한도에 닿으면 API는 502 `llm_unavailable`을 돌려준다.
-- Vercel 대시보드(Firewall)에서 `/api/analyze` 등에 IP 기준 rate limit 규칙을 걸 수 있는지 Hobby 플랜에서 확인한다.
+- Vercel 대시보드(Firewall)에서 `/api/analyze` 등과 `/mcp`에 IP 기준 rate limit 규칙을 걸 수 있는지 Hobby 플랜에서 확인한다.
   안 되면 위의 상한만으로 막는다. 사용자별 한도는 저장소가 필요해 만들지 않았다.
 
 | 상황 | 응답 |

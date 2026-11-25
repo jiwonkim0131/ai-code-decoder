@@ -39,7 +39,8 @@ def install_request_logging(app: FastAPI) -> None:
             status = response.status_code
             return response
         finally:
-            if request.url.path.startswith("/api/"):
+            # /mcp는 토큰 없는 시도(401)도 세도록 HTTP 요청 단위로 남긴다(도구별 줄은 mcp_server).
+            if request.url.path.startswith("/api/") or request.url.path == "/mcp":
                 log_event(
                     kind=f"{request.method} {request.url.path}",
                     status=status,

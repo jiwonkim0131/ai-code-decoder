@@ -22,6 +22,7 @@ class ErrorCode:
     LLM_UNAVAILABLE = "llm_unavailable"
     ANALYSIS_FAILED = "analysis_failed"
     RATE_LIMITED = "rate_limited"
+    UNAUTHORIZED = "unauthorized"
     NOT_FOUND = "not_found"
     NOT_IMPLEMENTED = "not_implemented"
     INTERNAL = "internal_error"
