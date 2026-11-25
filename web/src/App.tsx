@@ -23,6 +23,12 @@ import {
 import { Select } from "./components/Select";
 import { formatPasted, INDENT, leadingSpaces, nextIndent, reindent } from "./editing";
 import { buildHtml, buildMarkdown, formatLines, reportFileName, type ReportData } from "./report";
+import tourInput from "./assets/tour/1-input.jpg";
+import tourUnderstand from "./assets/tour/2-understand.jpg";
+import tourChoose from "./assets/tour/3-choose.jpg";
+import tourCompare from "./assets/tour/4-compare.jpg";
+import tourApply from "./assets/tour/5-apply.jpg";
+import tourSummary from "./assets/tour/6-summary.jpg";
 
 type Stage = 0 | 1 | 2 | 3 | 4 | 5;
 type ConstraintWork = {
@@ -1668,33 +1674,42 @@ function StepGuideDialog({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 // 서비스 소개 투어. 처음 들어왔을 때 한 번 열고, 오른쪽 아래 버튼으로 언제든 다시 연다.
-// 6단계 목록을 그대로 두고 장마다 해당 단계를 강조해, 흐름 안에서 지금 설명하는 위치를 보여 준다.
+// 첫 장은 6단계 전체를, 나머지 장은 단계마다 실제 화면 캡처(fetch_users 예제)를 보여 준다.
 const TOUR_SEEN_KEY = "tour-seen";
-const TOUR_SLIDES: { title: string; body: string; stages: number[] }[] = [
+const TOUR_SLIDES: { title: string; body: string; image?: string }[] = [
   {
     title: "AI Code Tutor에 오신 걸 환영해요",
-    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 짰는지를 스스로 판단하며 배우도록 돕는 서비스예요. 6단계를 따라가면 돼요.",
-    stages: [],
+    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 짰는지를 스스로 판단하며 배우도록 돕는 서비스예요. 아래 6단계를 따라가면 돼요.",
   },
   {
-    title: "코드를 넣고 흐름을 이해해요",
-    body: "학습하고 싶은 코드를 입력하면 실행 순서대로 카드를 나눠 설명해요. 설명마다 공식 문서 같은 근거를 함께 보여 줘요. 코드는 실행하지 않아요.",
-    stages: [0, 1],
+    title: "코드 입력",
+    body: "학습하고 싶은 코드를 넣고, 궁금한 점과 설명 수준을 골라요. 코드는 실행하지 않아요.",
+    image: tourInput,
   },
   {
-    title: "나라면 어떻게 짰을지 골라요",
-    body: "다른 방식으로도 짤 수 있었던 부분에서 내 방식을 고르고 이유를 적어요. 그다음 각 방식의 장단점과 내 선택에 대한 피드백을 확인해요.",
-    stages: [2, 3],
+    title: "코드 이해하기",
+    body: "코드를 실행 순서대로 카드로 나눠 설명해요. 카드를 누르면 해당 줄이 강조되고, 설명마다 공식 문서 같은 근거가 붙어요.",
+    image: tourUnderstand,
   },
   {
-    title: "상황이 바뀌면 어떨지 예상해요",
-    body: "API 응답이 느려지거나 요청이 몰리는 것처럼 상황이 달라졌을 때, 이 코드가 어떻게 동작할지 직접 답해 보고 피드백을 받아요.",
-    stages: [4],
+    title: "내 방식 고르기",
+    body: "다른 방식으로도 짤 수 있었던 부분에서, 나라면 어떤 방식을 선택할지 고르고 이유를 적어요.",
+    image: tourChoose,
   },
   {
-    title: "배운 내용을 정리해요",
+    title: "장단점 비교하기",
+    body: "원 코드에서 사용한 방식과 내 선택을 나란히 보고, 선택할 때 생각해 볼 점을 얼마나 반영했는지 피드백을 받아요.",
+    image: tourCompare,
+  },
+  {
+    title: "다른 상황에 적용하기",
+    body: "API가 느려지거나 호출 제한에 걸리는 것처럼 상황이 바뀌면 이 코드가 어떻게 동작할지 직접 답해 봐요.",
+    image: tourApply,
+  },
+  {
+    title: "배운 내용 정리하기",
     body: "핵심 내용과 다시 살펴볼 부분을 정리해 줘요. HTML이나 Markdown으로 받아 보관할 수 있어요. 이 안내는 오른쪽 아래 버튼으로 언제든 다시 볼 수 있어요.",
-    stages: [5],
+    image: tourSummary,
   },
 ];
 
@@ -1748,14 +1763,18 @@ function TourDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
-        <ol className="tour-stages" aria-label="학습 단계">
-          {STAGES.map((name, i) => (
-            <li key={name} className={current.stages.includes(i) ? "on" : undefined}>
-              <span className="tour-stage-no">{i + 1}</span>
-              {name}
-            </li>
-          ))}
-        </ol>
+        {current.image ? (
+          <img className="tour-shot" src={current.image} alt={`${current.title} 화면 예시`} />
+        ) : (
+          <ol className="tour-stages" aria-label="학습 단계">
+            {STAGES.map((name, i) => (
+              <li key={name}>
+                <span className="tour-stage-no">{i + 1}</span>
+                {name}
+              </li>
+            ))}
+          </ol>
+        )}
         <div className="guide-text" aria-live="polite">
           <span className="guide-count">
             {index + 1} / {TOUR_SLIDES.length}

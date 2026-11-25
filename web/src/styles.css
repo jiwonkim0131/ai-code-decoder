@@ -875,7 +875,7 @@ html:has(dialog[open]) { overflow: hidden; }
 /* 학습 정리: 받는 HTML 보고서를 그대로 미리 본다 */
 .report-preview { width: 100%; height: calc(100vh - 260px); min-height: 520px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
 
-/* 서비스 소개: 오른쪽 아래에 늘 떠 있는 버튼과, 6단계 목록에서 지금 설명하는 단계를 칠하는 투어 */
+/* 서비스 소개: 오른쪽 아래에 늘 떠 있는 버튼과, 단계별 화면 캡처를 넘겨 보는 투어 */
 .tour-fab {
   position: fixed;
   right: 24px;
@@ -895,9 +895,9 @@ html:has(dialog[open]) { overflow: hidden; }
 }
 .tour-fab:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
 @media (max-width: 480px) { .tour-fab { right: 16px; bottom: 16px; } }
-.dialog.tour { width: min(560px, calc(100vw - 32px)); }
+.dialog.tour { width: min(760px, calc(100vw - 32px)); }
 .dialog.tour .dialog-body { gap: 20px; padding-top: 56px; }
-.dialog.tour .guide-text { min-height: 132px; }
+.dialog.tour .guide-text { min-height: 104px; }
 .dialog.tour .guide-text h2 { margin: 0; font-size: 17px; }
 .tour-stages {
   display: grid;
@@ -916,8 +916,17 @@ html:has(dialog[open]) { overflow: hidden; }
   border-radius: 8px;
   color: var(--muted);
   font-size: 13px;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
-.tour-stages li.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); font-weight: 600; }
+/* 캡처는 1280x800(16:10). 낮은 화면에서는 위쪽(헤더·제목)이 보이게 잘라 높이를 줄인다 */
+.tour-shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 48vh;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
 .tour-stage-no { font-family: var(--mono); font-size: 12px; color: var(--accent); }
 @media (max-width: 480px) { .tour-stages { grid-template-columns: repeat(2, 1fr); } }
