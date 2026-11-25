@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -27,7 +29,23 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_agents(settings)
 
-    app = FastAPI(title="AI Code Decoder API", version="0.1.0")
+    mcp = None
+    if settings.mcp_enabled:
+        from server.mcp_server import create_mcp_server
+        from server.sealing import Sealer
+
+        mcp = create_mcp_server(Sealer(settings.mcp_seal_key or ""))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if mcp is None:
+            yield
+            return
+        # MCP 세션 관리자는 앱이 떠 있는 동안 작업 그룹을 돌려야 요청을 받는다.
+        async with mcp.session_manager.run():
+            yield
+
+    app = FastAPI(title="AI Code Decoder API", version="0.1.0", lifespan=lifespan)
     install_error_handlers(app)
     install_body_limit(app)
     install_request_logging(app)
@@ -42,6 +60,12 @@ def create_app() -> FastAPI:
         from server.dev import router as dev_router
 
         app.include_router(dev_router)
+
+    if mcp is not None:
+        from server.mcp_server import mcp_routes
+
+        # streamable_http_app()이 세션 관리자를 만들므로 lifespan이 돌기 전에 붙인다.
+        app.router.routes.extend(mcp_routes(mcp, settings.mcp_tokens))
 
     install_frontend(app)  # 가장 마지막: /api 라우트가 먼저 매칭된다
     return app

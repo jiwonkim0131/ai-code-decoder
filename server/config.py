@@ -28,6 +28,12 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_secrets(name: str) -> tuple[str, ...]:
+    """쉼표로 구분한 비밀값 목록. _env_list와 달리 대소문자를 바꾸지 않는다."""
+    raw = os.getenv(name) or ""
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 def _env_list(name: str, default: str) -> tuple[str, ...]:
     raw = os.getenv(name) or default
     return tuple(item.strip().lower() for item in raw.split(",") if item.strip())
@@ -39,11 +45,18 @@ class Settings:
     openai_model: str
     allowed_langs: tuple[str, ...]
     enable_dev_routes: bool
+    # 원격 MCP(/mcp): 둘 다 있어야 열린다(기본 닫힘). LLM 비용이 드는 공개 엔드포인트라서다.
+    mcp_tokens: tuple[str, ...] = ()
+    mcp_seal_key: str | None = None
     agent_timeout_seconds: float = DEFAULT_AGENT_TIMEOUT_SECONDS
 
     @property
     def has_openai_key(self) -> bool:
         return bool(self.openai_api_key)
+
+    @property
+    def mcp_enabled(self) -> bool:
+        return bool(self.mcp_tokens and self.mcp_seal_key)
 
 
 @lru_cache
@@ -53,5 +66,7 @@ def get_settings() -> Settings:
         openai_model=os.getenv("OPENAI_MODEL") or DEFAULT_MODEL,
         allowed_langs=_env_list("ALLOWED_LANGS", "python"),
         enable_dev_routes=_env_bool("ENABLE_DEV_ROUTES"),
+        mcp_tokens=_env_secrets("MCP_TOKENS"),
+        mcp_seal_key=os.getenv("MCP_SEAL_KEY") or None,
         agent_timeout_seconds=_env_float("AGENT_TIMEOUT_SECONDS", DEFAULT_AGENT_TIMEOUT_SECONDS),
     )

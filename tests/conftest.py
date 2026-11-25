@@ -21,6 +21,8 @@ ENV_KEYS = (
     "ALLOWED_LANGS",
     "ENABLE_DEV_ROUTES",
     "AGENT_TIMEOUT_SECONDS",
+    "MCP_TOKENS",
+    "MCP_SEAL_KEY",
 )
 
 
