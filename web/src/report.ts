@@ -53,19 +53,19 @@ function refLabel(data: ReportData, ref: string): string {
   const [kind, id] = ref.split(":");
   if (kind === "step") {
     const step = data.analysis.steps.find((s) => String(s.id) === id);
-    return step ? `코드 분석 ${step.id}단계` : ref;
+    return step ? `코드 이해하기 ${step.id}단계` : ref;
   }
   if (kind === "decision") {
     const index = data.decisions.findIndex((d) => d.dp.id === id);
-    return index >= 0 ? `설계 포인트 ${index + 1}` : ref;
+    return index >= 0 ? `생각해 볼 부분 ${index + 1}` : ref;
   }
   const app = data.applications.find((a) => a.constraint.id === id);
-  return app ? `설계 응용 · ${app.constraint.label}` : ref;
+  return app ? `다른 상황에 적용하기 · ${app.constraint.label}` : ref;
 }
 
 const optionLabel = (dp: DecisionPoint, id: string) => dp.options.find((o) => o.id === id)?.label ?? id;
 const conditionLabel = (dp: DecisionPoint, id: string) => dp.conditions.find((c) => c.id === id)?.label ?? id;
-const STATUS_LABEL = { hit: "반영", miss: "미반영" } as const;
+const STATUS_LABEL = { hit: "반영", miss: "더 생각해 볼 점" } as const;
 
 // --- Markdown -----------------------------------------------------------
 
@@ -90,7 +90,7 @@ export function buildMarkdown(data: ReportData): string {
     out.push("", "## 다시 볼 것", "", ...data.summary.reviewPoints.map((p) => `- ${p}`));
   }
 
-  out.push("", "## 1. 코드 분석", "");
+  out.push("", "## 1. 코드 이해하기", "");
   for (const step of data.analysis.steps) {
     out.push(`### ${step.id}단계. ${step.title}`, "", `\`${step.symbol}\` · line: ${formatLines(step.lines)}`, "", step.summary);
     if (step.io) out.push("", `- 입력: ${step.io.in}`, `- 출력: ${step.io.out}`);
@@ -98,16 +98,16 @@ export function buildMarkdown(data: ReportData): string {
   }
 
   if (data.decisions.length) {
-    out.push("## 2. 설계 선택 · 비교", "");
+    out.push("## 2. 내 방식 고르기 · 장단점 비교하기", "");
     data.decisions.forEach(({ dp, verdict }, i) => {
-      out.push(`### 설계 포인트 ${i + 1}. ${dp.prompt}`, "", `line: ${formatLines(dp.lines)}`, "");
+      out.push(`### 생각해 볼 부분 ${i + 1}. ${dp.prompt}`, "", `line: ${formatLines(dp.lines)}`, "");
       out.push(
         verdict.mine
           ? `- **내가 선택한 답:** ${optionLabel(dp, verdict.mine.choice)}${verdict.mine.reason.trim() ? ` — ${verdict.mine.reason.trim()}` : ""}`
-          : "- **내가 선택한 답:** 건너뜀(설계 비교만 봄)",
-        `- **원본 코드의 설계:** ${verdict.codeChoice.label} — ${verdict.codeChoice.summary}`,
+          : "- **내가 선택한 답:** 건너뜀(장단점 비교만 봄)",
+        `- **원 코드에서 사용한 방식:** ${verdict.codeChoice.label} — ${verdict.codeChoice.summary}`,
         "",
-        "| 판단 기준 | 결과 | 설명 |",
+        "| 선택할 때 생각해 볼 점 | 결과 | 설명 |",
         "| --- | --- | --- |",
         ...verdict.conditions.map(
           (c) => `| ${cell(conditionLabel(dp, c.id))} | ${c.status ? STATUS_LABEL[c.status] : "-"} | ${cell(c.note)} |`,
@@ -125,7 +125,7 @@ export function buildMarkdown(data: ReportData): string {
   }
 
   if (data.applications.length) {
-    out.push(`## ${data.decisions.length ? 3 : 2}. 설계 응용`, "");
+    out.push(`## ${data.decisions.length ? 3 : 2}. 다른 상황에 적용하기`, "");
     for (const app of data.applications) {
       out.push(`### ${app.constraint.label}`, "", `> ${app.constraint.situation}`, "", `**질문:** ${app.scenario.question}`, "");
       out.push(`**내 답:** ${app.answer.trim() || "작성하지 않음"}`, "");
@@ -173,11 +173,11 @@ export function buildHtml(data: ReportData): string {
   parts.push(
     section(
       ++n,
-      "코드 분석",
+      "코드 이해하기",
       `<ol class="steps">${data.analysis.steps
         .map(
           (step) => `<li class="card step">
-  <div class="card-head"><span class="step-no">${step.id}</span><strong>${esc(step.title)}</strong>${step.isDecision ? '<span class="badge amber">설계 포인트</span>' : ""}</div>
+  <div class="card-head"><span class="step-no">${step.id}</span><strong>${esc(step.title)}</strong>${step.isDecision ? '<span class="badge amber">생각해 볼 부분</span>' : ""}</div>
   <div class="meta"><code>${esc(step.symbol)}</code><span>line: ${formatLines(step.lines)}</span></div>
   <p>${esc(step.summary)}</p>
   ${step.io ? `<dl class="io"><dt>입력</dt><dd>${esc(step.io.in)}</dd><dt>출력</dt><dd>${esc(step.io.out)}</dd></dl>` : ""}
@@ -191,19 +191,19 @@ export function buildHtml(data: ReportData): string {
     parts.push(
       section(
         ++n,
-        "설계 선택 · 비교",
+        "내 방식 고르기 · 장단점 비교하기",
         data.decisions
           .map(({ dp, verdict }, i) => {
             const mine = verdict.mine
               ? `<strong>${esc(optionLabel(dp, verdict.mine.choice))}</strong>${verdict.mine.reason.trim() ? `<p>${esc(verdict.mine.reason.trim())}</p>` : ""}`
-              : '<span class="muted">건너뜀 (설계 비교만 봄)</span>';
-            const score = verdict.skipped ? "" : `<span class="badge accent score">판단 기준 ${verdict.hit}/${verdict.total} 반영</span>`;
+              : '<span class="muted">건너뜀 (장단점 비교만 봄)</span>';
+            const score = verdict.skipped ? "" : `<span class="badge accent score">생각해 볼 점 ${verdict.hit}/${verdict.total} 반영</span>`;
             return `<article class="card decision">
-  <div class="card-head"><span class="badge amber">설계 포인트 ${i + 1}</span><span class="muted">line: ${formatLines(dp.lines)}</span>${score}</div>
+  <div class="card-head"><span class="badge amber">생각해 볼 부분 ${i + 1}</span><span class="muted">line: ${formatLines(dp.lines)}</span>${score}</div>
   <h3>${esc(dp.prompt)}</h3>
   <div class="compare">
     <div><span class="label">내가 선택한 답</span>${mine}</div>
-    <div><span class="label">원본 코드의 설계</span><strong>${esc(verdict.codeChoice.label)}</strong><p>${esc(verdict.codeChoice.summary)}</p></div>
+    <div><span class="label">원 코드에서 사용한 방식</span><strong>${esc(verdict.codeChoice.label)}</strong><p>${esc(verdict.codeChoice.summary)}</p></div>
   </div>
   <ul class="conditions">${verdict.conditions
     .map(
@@ -228,7 +228,7 @@ export function buildHtml(data: ReportData): string {
     parts.push(
       section(
         ++n,
-        "설계 응용",
+        "다른 상황에 적용하기",
         data.applications
           .map((app) => {
             const feedback = app.feedback
