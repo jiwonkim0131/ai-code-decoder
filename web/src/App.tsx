@@ -1676,10 +1676,12 @@ function StepGuideDialog({ open, onClose }: { open: boolean; onClose: () => void
 // 서비스 소개 투어. 처음 들어왔을 때 한 번 열고, 오른쪽 아래 버튼으로 언제든 다시 연다.
 // 첫 장은 6단계 전체를, 나머지 장은 단계마다 실제 화면 캡처(fetch_users 예제)를 보여 준다.
 const TOUR_SEEN_KEY = "tour-seen";
+// 첫 장 단계 목록에서 한 단계를 강조하는 시간(초). styles.css의 tour-roll 주기(6단계 × 이 값)와 맞춘다.
+const TOUR_ROLL_STEP = 1.2;
 const TOUR_SLIDES: { title: string; body: string; image?: string }[] = [
   {
     title: "AI Code Tutor에 오신 걸 환영해요",
-    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 짰는지를 스스로 판단하며 배우도록 돕는 서비스예요. 아래 6단계를 따라가면 돼요.",
+    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 짰는지를 스스로 판단하며 배우도록 돕는 서비스예요.\n아래 6단계를 따라가면 돼요.",
   },
   {
     title: "코드 입력",
@@ -1763,24 +1765,35 @@ function TourDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         </button>
-        {current.image ? (
-          <img className="tour-shot" src={current.image} alt={`${current.title} 화면 예시`} />
-        ) : (
-          <ol className="tour-stages" aria-label="학습 단계">
-            {STAGES.map((name, i) => (
-              <li key={name}>
-                <span className="tour-stage-no">{i + 1}</span>
-                {name}
-              </li>
-            ))}
-          </ol>
-        )}
-        <div className="guide-text" aria-live="polite">
-          <span className="guide-count">
-            {index + 1} / {TOUR_SLIDES.length}
-          </span>
-          <h2 id="tour-title">{current.title}</h2>
-          <p>{current.body}</p>
+        {/* 캡처와 첫 장의 단계 목록이 같은 크기의 칸을 써서, 장을 넘겨도 모달 크기가 그대로다 */}
+        <div className="tour-visual">
+          {current.image ? (
+            <img src={current.image} alt={`${current.title} 화면 예시`} />
+          ) : (
+            <div className="tour-intro">
+              <ol className="tour-stages" aria-label="학습 단계">
+                {/* 단계마다 시작을 늦춰, 강조가 1단계부터 6단계까지 차례로 내려가며 반복된다 */}
+                {STAGES.map((name, i) => (
+                  <li key={name} style={{ animationDelay: `${i * TOUR_ROLL_STEP}s` }}>
+                    <span className="tour-stage-no">{i + 1}</span>
+                    {name}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+        {/* 모든 장의 글을 한 칸에 겹쳐 두고 지금 장만 보인다. 글 영역 높이가 가장 긴 글에 맞춰진다. */}
+        <div className="tour-texts" aria-live="polite">
+          {TOUR_SLIDES.map((slide, i) => (
+            <div key={slide.title} className="guide-text" aria-hidden={i !== index} data-current={i === index}>
+              <span className="guide-count">
+                {i + 1} / {TOUR_SLIDES.length}
+              </span>
+              <h2 id={i === index ? "tour-title" : undefined}>{slide.title}</h2>
+              <p>{slide.body}</p>
+            </div>
+          ))}
         </div>
       </div>
       <div className="dialog-actions">
