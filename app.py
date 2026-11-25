@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
         async with mcp.session_manager.run():
             yield
 
-    app = FastAPI(title="AI Code Decoder API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="AI Code Tutor API", version="0.1.0", lifespan=lifespan)
     install_error_handlers(app)
     install_body_limit(app)
     install_request_logging(app)

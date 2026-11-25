@@ -164,7 +164,7 @@ def test_any_listed_token_is_accepted(open_app):
 def test_initialize_gives_learning_instructions(open_app):
     result = McpClient(open_app()).initialize()
 
-    assert result["serverInfo"]["name"] == "ai-code-decoder"
+    assert result["serverInfo"]["name"] == "ai-code-tutor"
     assert "key" in result["instructions"]
 
 

@@ -73,7 +73,7 @@ DECISION_KIND = "decision"
 CONSTRAINT_KIND = "constraint"
 
 INSTRUCTIONS = """\
-AI Code Decoder: AI가 짜 준 Python 코드의 흐름과 설계 결정을 사용자가 스스로 판단하며 배우게
+AI Code Tutor: AI가 짜 준 Python 코드의 흐름과 설계 결정을 사용자가 스스로 판단하며 배우게
 돕는다. 서버는 사용자 컴퓨터의 파일을 읽을 수 없다. 사용자가 가리킨 로컬 파일은 네가 직접 읽어
 `code`로 넘겨라. 서버는 상태를 저장하지 않으니, 앞 도구가 준 값(steps, key 등)을 다음 도구에 넘겨라.
 `key`는 정답이 암호화된 값이라 읽을 수 없다. 받은 그대로 넘기고, 만료됐다고 하면 다시 분석하라.
@@ -200,8 +200,8 @@ async def _call[T](handler: Callable[[Any], Awaitable[T]], build: Callable[[], A
 def create_mcp_server(sealer: Sealer) -> MCPServer:
     """앱마다 새로 만든다(세션 관리자는 한 번만 run할 수 있다)."""
     server = MCPServer(
-        name="ai-code-decoder",
-        title="AI Code Decoder",
+        name="ai-code-tutor",
+        title="AI Code Tutor",
         instructions=INSTRUCTIONS,
         version="0.1.0",
     )

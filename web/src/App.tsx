@@ -1,6 +1,6 @@
-// API 확인용 간단한 FE. 6단계 학습 흐름(코드 입력 → 코드 분석 → 설계 선택 → 설계 비교 → 설계 응용 → 학습 정리)을
+// API 확인용 간단한 FE. 6단계 학습 흐름(코드 입력 → 코드 이해하기 → 내 방식 고르기 → 장단점 비교하기 → 다른 상황에 적용하기 → 배운 내용 정리하기)을
 // 한 화면 상태로 돈다. 화면에 고정으로 두는 것은 안내·버튼 문구, 설명 수준 3개, 6단계 이름뿐이다.
-// 설계 응용의 제약은 분석이 끝난 뒤 따로 받아 코드에 맞춰 고르고, 하나도 없거나 받지 못하면 설계 응용을 건너뛴다.
+// 다른 상황에 적용하기의 제약은 분석이 끝난 뒤 따로 받아 코드에 맞춰 고르고, 하나도 없거나 받지 못하면 이 단계를 건너뛴다.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   api,
@@ -23,6 +23,12 @@ import {
 import { Select } from "./components/Select";
 import { formatPasted, INDENT, leadingSpaces, nextIndent, reindent } from "./editing";
 import { buildHtml, buildMarkdown, formatLines, reportFileName, type ReportData } from "./report";
+import tourInput from "./assets/tour/1-input.jpg";
+import tourUnderstand from "./assets/tour/2-understand.jpg";
+import tourChoose from "./assets/tour/3-choose.jpg";
+import tourCompare from "./assets/tour/4-compare.jpg";
+import tourApply from "./assets/tour/5-apply.jpg";
+import tourSummary from "./assets/tour/6-summary.jpg";
 
 type Stage = 0 | 1 | 2 | 3 | 4 | 5;
 type ConstraintWork = {
@@ -40,15 +46,15 @@ const STEP_STATE_LABEL: Record<StepState, string> = {
   skipped: "건너뜀",
   todo: "아직 진행하지 않음",
 };
-const STAGES = ["코드 입력", "코드 분석", "설계 선택", "설계 비교", "설계 응용", "학습 정리"];
+const STAGES = ["코드 입력", "코드 이해하기", "내 방식 고르기", "장단점 비교하기", "다른 상황에 적용하기", "배운 내용 정리하기"];
 // 단계 설명은 넓은 화면에서 두 줄 안에 들어가게 쓴다(헤더 높이를 두 줄로 고정한다).
 const STAGE_DESCRIPTIONS = [
-  "이해가 필요한 코드를 붙여넣고, 원하는 설명 수준을 선택하세요.",
-  "정적 분석 결과를 기반으로 문법과 실행 흐름을 나눠 설명해요. 카드를 누르면 해당 코드가 강조돼요.\n설계 선택에서 다른 설계 방식을 직접 골라 보거나, 설계 비교로 바로 넘어갈 수 있어요.",
-  "이 설계 포인트에서 나라면 어떤 방식을 골랐을지 선택하고, 그 이유를 적어 보세요.",
-  "내가 선택한 방식이 설계 시 고려해야 할 판단 기준을 얼마나 반영했는지 확인하고, 다른 방식들과 비교해 보세요.",
-  "제약 조건이 변경되었을 때 이 설계에 어떤 변화가 생길지 고민해 보세요.",
-  "지금까지 학습한 내용 중 핵심을 정리했어요. HTML 보고서나 Markdown으로 받아 보관할 수 있어요.",
+  "학습하고 싶은 코드를 입력하세요.",
+  "코드가 어떤 순서로, 어떻게 동작하는지 살펴보세요.",
+  "나라면 어떤 방식을 선택할지 고르고, 이유를 적어보세요.",
+  "각 방식의 장단점과 내 선택에 대한 피드백을 확인하세요.",
+  "상황이 달라지면 이 코드가 어떻게 동작할지 예상해보세요.",
+  "핵심 내용과 다시 살펴볼 부분을 확인하세요.",
 ];
 // 서버가 분석할 수 있는 언어. 버전은 서버의 AST 파서 기준이다.
 const LANGUAGES = [{ id: "python", name: "Python", version: "3.12" }];
@@ -61,7 +67,7 @@ const LEVELS: [Level, string][] = [
 const ANALYZE_STEPS: [string, number][] = [
   ["코드 구조를 읽고 있어요", 0],
   ["공식 문서를 찾고 있어요", 4],
-  ["설계 포인트를 고르고 있어요", 14],
+  ["생각해 볼 부분을 고르고 있어요", 14],
 ];
 
 export default function App() {
@@ -74,6 +80,7 @@ export default function App() {
   const [level, setLevel] = useState<Level>("work");
   const [findings, setFindings] = useState<SecretFinding[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(() => !tourSeen());
   const [scanning, setScanning] = useState(false);
   const [secretsDialog, setSecretsDialog] = useState(false);
 
@@ -104,10 +111,10 @@ export default function App() {
   const constraintsPending = analysis !== null && constraintList === null;
   const constraint: Constraint | undefined = constraints.find((c) => c.id === constraintId);
   const verdict = dp ? verdicts[dp.id] : undefined;
-  // 트레이드오프 표에서 내가 고른 방식의 행을 칠할 때 쓴다(건너뛰었으면 없음).
+  // 장단점 표에서 내가 고른 방식의 행을 칠할 때 쓴다(건너뛰었으면 없음).
   const mineLabel = verdict?.mine && dp?.options.find((o) => o.id === verdict.mine!.choice)?.label;
 
-  // 단계 버튼은 보여 줄 내용이 있을 때만 연다(설계 포인트가 없거나 비교 전이면 3·4단계는 닫힘).
+  // 단계 버튼은 보여 줄 내용이 있을 때만 연다(생각해 볼 부분이 없거나 비교 전이면 3·4단계는 닫힘).
   const available = (i: number) =>
     i === 0 ||
     (i === 1 && analysis !== null) ||
@@ -226,7 +233,7 @@ export default function App() {
     if (!dp || !analysis) return;
     const evidence = analysis.steps.find((s) => s.id === dp.stepId)?.evidence ?? [];
     const result = await run(
-      "설계 비교",
+      "장단점 비교",
       () => api.judge({ decisionPoint: dp, evidence, choice: skip ? null : choice, reason: skip ? "" : reason, level }),
       () => submitJudge(skip),
     );
@@ -251,7 +258,7 @@ export default function App() {
     const target = dps[index];
     const evidence = analysis!.steps.find((s) => s.id === target.stepId)?.evidence ?? [];
     const result = await run(
-      "설계 비교",
+      "장단점 비교",
       () => api.judge({ decisionPoint: target, evidence, choice: null, reason: "", level }),
       () => skipToExplain(index),
     );
@@ -301,7 +308,7 @@ export default function App() {
     if (result) updateWork(c.id, { modelAnswer: result.answer, showModel: true });
   };
 
-  // 학습 정리: 1~5단계 기록을 모아 핵심 정리만 LLM에 맡기고, 문서는 기록으로 조립한다.
+  // 배운 내용 정리하기: 1~5단계 기록을 모아 핵심 정리만 LLM에 맡기고, 문서는 기록으로 조립한다.
   // 같은 기록이면 캐시된 정리를 쓰므로 단계를 오가도 다시 만들지 않는다.
   const openSummary = async () => {
     if (!analysis) return;
@@ -313,7 +320,7 @@ export default function App() {
         : [];
     });
     const summary: SummaryResponse | null = await run(
-      "학습 정리",
+      "배운 내용 정리",
       () =>
         api.summary({
           steps: analysis.steps,
@@ -374,18 +381,18 @@ export default function App() {
   const noChallenge = (stage === 2 || stage === 3) && !(stage === 2 ? dp : dp && verdict);
 
   // 다음 단계로 가는 버튼은 단계마다 페이지 제목 오른쪽 같은 자리에 둔다(주 버튼이 맨 오른쪽).
-  // 바꿔 볼 제약이 없는 코드면 설계 응용을 건너뛰고 학습 정리로 간다.
+  // 바꿔 볼 제약이 없는 코드면 다른 상황에 적용하기를 건너뛰고 배운 내용 정리하기로 간다.
   const toApply = constraintsPending ? (
     <button className="primary" disabled title="이 코드에 맞는 제약을 고르고 있어요">
-      설계 응용 준비 중…
+      다른 상황에 적용하기 준비 중…
     </button>
   ) : constraints.length > 0 ? (
     <button className="primary" onClick={() => go(4)}>
-      설계 응용
+      다른 상황에 적용하기
     </button>
   ) : (
     <button className="primary" disabled={busy} onClick={openSummary}>
-      학습 정리
+      배운 내용 정리하기
     </button>
   );
   let footer: ReactNode = null;
@@ -404,10 +411,10 @@ export default function App() {
       dps.length > 0 ? (
         <>
           <button disabled={busy} onClick={() => skipToExplain(0)}>
-            설계 비교 바로 보기
+            장단점 비교 바로 보기
           </button>
           <button className="primary" disabled={busy} onClick={() => startChallenge(0)}>
-            설계 선택
+            내 방식 고르기
           </button>
         </>
       ) : (
@@ -416,7 +423,7 @@ export default function App() {
   } else if (noChallenge) {
     footer = (
       <>
-        <button onClick={() => go(1)}>코드 분석으로</button>
+        <button onClick={() => go(1)}>코드 이해하기로</button>
         {dps.length === 0 && toApply}
       </>
     );
@@ -424,7 +431,7 @@ export default function App() {
     footer = (
       <>
         <button disabled={busy} onClick={() => submitJudge(true)}>
-          설계 비교 바로 보기
+          장단점 비교 바로 보기
         </button>
         <button className="primary" disabled={!choice || busy} onClick={() => submitJudge(false)}>
           제출
@@ -435,7 +442,7 @@ export default function App() {
     footer =
       dpIndex + 1 < dps.length ? (
         <button className="primary" onClick={() => startChallenge(dpIndex + 1)}>
-          다음 설계 포인트 ({dpIndex + 2}/{dps.length})
+          다음 생각해 볼 부분 ({dpIndex + 2}/{dps.length})
         </button>
       ) : (
         toApply
@@ -443,7 +450,7 @@ export default function App() {
   } else if (stage === 4) {
     footer = (
       <button className="primary" disabled={busy} onClick={openSummary}>
-        학습 정리
+        배운 내용 정리하기
       </button>
     );
   } else if (stage === 5 && report) {
@@ -467,14 +474,14 @@ export default function App() {
               <span className="brand-mark" aria-hidden="true">
                 &lt;/&gt;
               </span>
-              <strong>AI Code Decoder</strong>
+              <strong>AI Code Tutor</strong>
             </div>
           ) : (
             <button className="brand brand-button" aria-label="코드 입력으로 돌아가기" onClick={() => setRestartDialog(true)}>
               <span className="brand-mark" aria-hidden="true">
                 &lt;/&gt;
               </span>
-              <strong>AI Code Decoder</strong>
+              <strong>AI Code Tutor</strong>
             </button>
           )}
           <nav className="stepnav" aria-label="학습 단계">
@@ -622,8 +629,8 @@ export default function App() {
             <section className="panel wide">
               <p className="banner info">
                 {dps.length === 0
-                  ? `이 코드에서는 설계 포인트를 찾지 못했어요. 코드 분석을 보거나 ${constraintsPending || constraints.length > 0 ? "설계 응용" : "학습 정리"}로 넘어가 보세요.`
-                  : "아직 선택한 설계 포인트가 없어요. 코드 분석에서 '설계 선택'을 눌러 시작하세요."}
+                  ? `이 코드에서는 생각해 볼 부분을 찾지 못했어요. 코드 이해하기를 다시 보거나 ${constraintsPending || constraints.length > 0 ? "다른 상황에 적용하기" : "배운 내용 정리하기"}로 넘어가 보세요.`
+                  : "아직 선택한 생각해 볼 부분이 없어요. 코드 이해하기에서 '내 방식 고르기'를 눌러 시작하세요."}
               </p>
             </section>
           )}
@@ -637,7 +644,7 @@ export default function App() {
                 <section className="dp-col">
                   <div className="field dp-field">
                     <div className="field-title muted">
-                      설계 포인트 {dpIndex + 1}/{dps.length} · line: {formatLines(dp.lines)}
+                      생각해 볼 부분 {dpIndex + 1}/{dps.length} · line: {formatLines(dp.lines)}
                     </div>
                     <div className="question-row">
                       <h2>{dp.prompt}</h2>
@@ -679,7 +686,7 @@ export default function App() {
             <section className="panel">
               {!verdict.skipped && (
                 <h2>
-                  판단 기준 {verdict.total}개 중 {verdict.hit}개를 반영했어요
+                  선택할 때 생각해 볼 점 {verdict.total}개 중 {verdict.hit}개를 반영했어요
                 </h2>
               )}
               <div className={`two-col compare${verdict.mine ? "" : " single"}`}>
@@ -695,7 +702,7 @@ export default function App() {
                   </section>
                 )}
                 <section>
-                  <h3>원본 코드의 설계</h3>
+                  <h3>원 코드에서 사용한 방식</h3>
                   <div className="card">
                     <strong>
                       {dp.codeOption}. {verdict.codeChoice.label}
@@ -708,20 +715,20 @@ export default function App() {
                   </div>
                 </section>
               </div>
-              <h3>판단 기준</h3>
+              <h3>선택할 때 생각해 볼 점</h3>
               {verdict.conditions.map((c) => {
                 const condition = dp.conditions.find((x) => x.id === c.id);
                 return (
                   <div key={c.id} className={`card condition ${c.status ?? ""}`}>
                     <div className="row">
                       <strong>{condition?.label ?? c.id}</strong>
-                      {c.status && <span className={`badge ${c.status}`}>{c.status === "hit" ? "반영" : "미반영"}</span>}
+                      {c.status && <span className={`badge ${c.status}`}>{c.status === "hit" ? "반영" : "더 생각해 볼 점"}</span>}
                     </div>
                     <p>{c.note}</p>
                   </div>
                 );
               })}
-              <h3>방식별 트레이드오프</h3>
+              <h3>방식별 장단점</h3>
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -751,7 +758,7 @@ export default function App() {
           {stage === 4 && analysis && (
             <div className="stack">
               <section className="panel">
-                <h2>어떤 조건을 추가할까요?</h2>
+                <h2>어떤 상황을 살펴볼까요?</h2>
                 <div className="chips">
                   {constraints.map((c) => (
                     <button
@@ -766,7 +773,7 @@ export default function App() {
                   ))}
                 </div>
               </section>
-              {/* 조건을 고르기 전에도 자리를 잡아 둬서, 고른 순간 아래 레이아웃이 튀지 않는다 */}
+              {/* 상황을 고르기 전에도 자리를 잡아 둬서, 고른 순간 아래 레이아웃이 튀지 않는다 */}
               <section className="panel apply">
                 {constraint && work ? (
                   <>
@@ -785,7 +792,7 @@ export default function App() {
                       aria-label="답"
                       rows={5}
                       value={work.answer}
-                      placeholder="이 조건에서 설계가 어떻게 달라져야 할지 작성해 주세요."
+                      placeholder="이 상황에서 코드가 어떻게 동작할지, 무엇을 바꿔야 할지 작성해 주세요."
                       onChange={(e) => updateWork(constraint.id, { answer: e.target.value })}
                     />
                     <div className="apply-actions">
@@ -802,7 +809,7 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  <p className="apply-empty muted">추가할 조건을 선택해 주세요.</p>
+                  <p className="apply-empty muted">살펴볼 상황을 선택해 주세요.</p>
                 )}
               </section>
               {/* 제출 결과와 모범 답변은 입력 칸 아래 별도 섹션에 모은다 */}
@@ -857,6 +864,18 @@ export default function App() {
       <RestartDialog open={restartDialog} onCancel={() => setRestartDialog(false)} onConfirm={restart} />
 
       <StepGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+
+      <TourDialog
+        open={tourOpen}
+        onClose={() => {
+          markTourSeen();
+          setTourOpen(false);
+        }}
+      />
+
+      <button className="tour-fab" aria-label="서비스 소개 보기" title="서비스 소개" onClick={() => setTourOpen(true)}>
+        ?
+      </button>
 
       <div className="toasts">
         {error && (
@@ -919,7 +938,8 @@ const LOADING_TITLES: Record<string, string> = {
   분석: "코드를 분석하고 있어요",
   "질문 만들기": "질문을 생성하고 있어요",
   "모범 답변": "모범 답변을 생성하고 있어요",
-  "학습 정리": "학습 내용을 정리하고 있어요",
+  "장단점 비교": "장단점을 비교하고 있어요",
+  "배운 내용 정리": "배운 내용을 정리하고 있어요",
 };
 
 function LoadingDialog({ label }: { label: string | null }) {
@@ -1047,7 +1067,7 @@ function CodeView(props: { code: string; language: LanguageInfo; focus: Set<numb
   );
 }
 
-// 힌트 토스트를 여닫는 전구 버튼(설계 선택·설계 응용 공통).
+// 힌트 토스트를 여닫는 전구 버튼(내 방식 고르기·다른 상황에 적용하기 공통).
 function HintButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   return (
     <button className="hint-btn" aria-label="힌트 보기" aria-expanded={open} onClick={onToggle}>
@@ -1423,7 +1443,7 @@ function highlightLines(code: string): Token[][] {
 }
 
 // 줄 번호 목록을 범위로 줄인다: [5, 6, 7, 9] → "5-7, 9"
-// 코드 분석 단계 카드. 카드 사이 세로선이 번호를 이어 실행 순서를 보여 준다.
+// 코드 이해하기 단계 카드. 카드 사이 세로선이 번호를 이어 실행 순서를 보여 준다.
 // 카드 어디를 눌러도 선택되고, 키보드는 제목 버튼으로 같은 동작을 한다(근거의 문서 링크와 겹치지 않게).
 function StepCard({ step, selected, onSelect }: { step: Step; selected: boolean; onSelect: () => void }) {
   const cls = ["step-card", step.isDecision && "decision", selected && "selected"].filter(Boolean).join(" ");
@@ -1453,7 +1473,7 @@ function StepCard({ step, selected, onSelect }: { step: Step; selected: boolean;
               {step.title}
             </span>
           )}
-          {step.isDecision && <span className="badge decision-point">설계 포인트</span>}
+          {step.isDecision && <span className="badge decision-point">생각해 볼 부분</span>}
         </div>
         <div className="step-meta">
           <code className="step-symbol">{step.symbol}</code>
@@ -1534,7 +1554,7 @@ const GUIDE_PARTS = [
   {
     part: "num",
     title: "실행 순서",
-    body: "코드가 실행되는 순서예요. 카드 사이의 세로선이 번호를 이어 줘요. 설계 포인트인 단계는 노란색으로 표시돼요.",
+    body: "코드가 실행되는 순서예요. 카드 사이의 세로선이 번호를 이어 줘요. 생각해 볼 부분인 단계는 노란색으로 표시돼요.",
   },
   {
     part: "title",
@@ -1553,8 +1573,8 @@ const GUIDE_PARTS = [
   },
   {
     part: "decision",
-    title: "설계 포인트",
-    body: "다른 방식으로도 짤 수 있었던 선택이 들어 있는 단계예요. '설계 선택' 단계에서 나라면 어떻게 짰을지 직접 골라 볼 수 있어요.",
+    title: "생각해 볼 부분",
+    body: "다른 방식으로도 짤 수 있었던 선택이 들어 있는 단계예요. '내 방식 고르기' 단계에서 나라면 어떻게 짰을지 직접 골라 볼 수 있어요.",
   },
   {
     part: "summary",
@@ -1647,6 +1667,141 @@ function StepGuideDialog({ open, onClose }: { open: boolean; onClose: () => void
         </button>
         <button className="primary" autoFocus onClick={() => (last ? onClose() : setIndex(index + 1))}>
           {last ? "확인" : "다음"}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+// 서비스 소개 투어. 처음 들어왔을 때 한 번 열고, 오른쪽 아래 버튼으로 언제든 다시 연다.
+// 첫 장은 6단계 전체를, 나머지 장은 단계마다 실제 화면 캡처(fetch_users 예제)를 보여 준다.
+const TOUR_SEEN_KEY = "tour-seen";
+// 첫 장 단계 목록에서 한 단계를 강조하는 시간(초). styles.css의 tour-roll 주기(6단계 × 이 값)와 맞춘다.
+const TOUR_ROLL_STEP = 1.2;
+const TOUR_SLIDES: { title: string; body: string; image?: string }[] = [
+  {
+    title: "AI Code Tutor란?",
+    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 구현했는지 스스로 고민하며 학습하도록 돕는 도구예요.",
+  },
+  {
+    title: "코드 입력",
+    body: "학습하고 싶은 코드를 입력하고, 궁금한 점과 설명 수준을 선택해요.",
+    image: tourInput,
+  },
+  {
+    title: "코드 이해하기",
+    body: "코드를 실행 순서대로 분석하고 설명해요.\n공식 문서를 기반으로 알아야할 개념이나 중요한 코드를 좀 더 자세히 살펴보며 이해도를 높여요.",
+    image: tourUnderstand,
+  },
+  {
+    title: "내 방식 고르기",
+    body: "다양한 구현 방법을 살펴보고, 나라면 어떤 방식을 선택할지 고민해보면서 실력을 키울 수 있어요.",
+    image: tourChoose,
+  },
+  {
+    title: "장단점 비교하기",
+    body: "원본 코드에서 사용한 방식과 내가 선택한 방식을 비교해보고,\n내가 선택한 코드에 대해서 피드백을 받을 수 있어요.",
+    image: tourCompare,
+  },
+  {
+    title: "다른 상황에 적용하기",
+    body: "API가 느려지거나 호출 제한에 걸리는 것처럼,\n제약 조건이 바뀌면 이 코드가 어떻게 동작할지 직접 답해 보면서 다양한 상황에 대응할 수 있는 힘을 키울 수 있어요.",
+    image: tourApply,
+  },
+  {
+    title: "배운 내용 정리하기",
+    body: "핵심 내용과 다시 살펴볼 부분을 정리해 줘요. HTML이나 Markdown으로 받아 보관할 수 있어요.\n",
+    image: tourSummary,
+  },
+];
+
+// 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 매번 처음 방문으로 본다.
+function tourSeen() {
+  try {
+    return localStorage.getItem(TOUR_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markTourSeen() {
+  try {
+    localStorage.setItem(TOUR_SEEN_KEY, "1");
+  } catch {
+    // 저장하지 못해도 투어는 닫힌다.
+  }
+}
+
+function TourDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) {
+      setIndex(0);
+      dialog.showModal();
+    }
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  const current = TOUR_SLIDES[index];
+  const last = index === TOUR_SLIDES.length - 1;
+  return (
+    <dialog
+      ref={ref}
+      className="dialog tour"
+      aria-labelledby="tour-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => e.target === ref.current && onClose()}
+    >
+      <div className="dialog-body">
+        <button className="dialog-close" aria-label="닫기" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+        {/* 캡처와 첫 장의 단계 목록이 같은 크기의 칸을 써서, 장을 넘겨도 모달 크기가 그대로다 */}
+        <div className="tour-visual">
+          {current.image ? (
+            <img src={current.image} alt={`${current.title} 화면 예시`} />
+          ) : (
+            <div className="tour-intro">
+              <ol className="tour-stages" aria-label="학습 단계">
+                {/* 단계마다 시작을 늦춰, 강조가 1단계부터 6단계까지 차례로 내려가며 반복된다 */}
+                {STAGES.map((name, i) => (
+                  <li key={name} style={{ animationDelay: `${i * TOUR_ROLL_STEP}s` }}>
+                    <span className="tour-stage-no">{i + 1}</span>
+                    {name}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+        {/* 모든 장의 글을 한 칸에 겹쳐 두고 지금 장만 보인다. 글 영역 높이가 가장 긴 글에 맞춰진다. */}
+        <div className="tour-texts" aria-live="polite">
+          {TOUR_SLIDES.map((slide, i) => (
+            <div key={slide.title} className="guide-text" aria-hidden={i !== index} data-current={i === index}>
+              <span className="guide-count">
+                {i + 1} / {TOUR_SLIDES.length}
+              </span>
+              <h2 id={i === index ? "tour-title" : undefined}>{slide.title}</h2>
+              <p>{slide.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="dialog-actions">
+        <button onClick={() => setIndex(index - 1)} disabled={index === 0}>
+          이전
+        </button>
+        <button className="primary" autoFocus onClick={() => (last ? onClose() : setIndex(index + 1))}>
+          {last ? "시작하기" : "다음"}
         </button>
       </div>
     </dialog>
