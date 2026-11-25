@@ -74,6 +74,7 @@ export default function App() {
   const [level, setLevel] = useState<Level>("work");
   const [findings, setFindings] = useState<SecretFinding[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(() => !tourSeen());
   const [scanning, setScanning] = useState(false);
   const [secretsDialog, setSecretsDialog] = useState(false);
 
@@ -857,6 +858,18 @@ export default function App() {
       <RestartDialog open={restartDialog} onCancel={() => setRestartDialog(false)} onConfirm={restart} />
 
       <StepGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+
+      <TourDialog
+        open={tourOpen}
+        onClose={() => {
+          markTourSeen();
+          setTourOpen(false);
+        }}
+      />
+
+      <button className="tour-fab" aria-label="서비스 소개 보기" title="서비스 소개" onClick={() => setTourOpen(true)}>
+        ?
+      </button>
 
       <div className="toasts">
         {error && (
@@ -1648,6 +1661,115 @@ function StepGuideDialog({ open, onClose }: { open: boolean; onClose: () => void
         </button>
         <button className="primary" autoFocus onClick={() => (last ? onClose() : setIndex(index + 1))}>
           {last ? "확인" : "다음"}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+// 서비스 소개 투어. 처음 들어왔을 때 한 번 열고, 오른쪽 아래 버튼으로 언제든 다시 연다.
+// 6단계 목록을 그대로 두고 장마다 해당 단계를 강조해, 흐름 안에서 지금 설명하는 위치를 보여 준다.
+const TOUR_SEEN_KEY = "tour-seen";
+const TOUR_SLIDES: { title: string; body: string; stages: number[] }[] = [
+  {
+    title: "AI Code Tutor에 오신 걸 환영해요",
+    body: "AI가 짜 준 코드를 그냥 쓰지 않고, 어떻게 동작하는지와 왜 그렇게 짰는지를 스스로 판단하며 배우도록 돕는 서비스예요. 6단계를 따라가면 돼요.",
+    stages: [],
+  },
+  {
+    title: "코드를 넣고 흐름을 이해해요",
+    body: "학습하고 싶은 코드를 입력하면 실행 순서대로 카드를 나눠 설명해요. 설명마다 공식 문서 같은 근거를 함께 보여 줘요. 코드는 실행하지 않아요.",
+    stages: [0, 1],
+  },
+  {
+    title: "나라면 어떻게 짰을지 골라요",
+    body: "다른 방식으로도 짤 수 있었던 부분에서 내 방식을 고르고 이유를 적어요. 그다음 각 방식의 장단점과 내 선택에 대한 피드백을 확인해요.",
+    stages: [2, 3],
+  },
+  {
+    title: "상황이 바뀌면 어떨지 예상해요",
+    body: "API 응답이 느려지거나 요청이 몰리는 것처럼 상황이 달라졌을 때, 이 코드가 어떻게 동작할지 직접 답해 보고 피드백을 받아요.",
+    stages: [4],
+  },
+  {
+    title: "배운 내용을 정리해요",
+    body: "핵심 내용과 다시 살펴볼 부분을 정리해 줘요. HTML이나 Markdown으로 받아 보관할 수 있어요. 이 안내는 오른쪽 아래 버튼으로 언제든 다시 볼 수 있어요.",
+    stages: [5],
+  },
+];
+
+// 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)에서는 매번 처음 방문으로 본다.
+function tourSeen() {
+  try {
+    return localStorage.getItem(TOUR_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markTourSeen() {
+  try {
+    localStorage.setItem(TOUR_SEEN_KEY, "1");
+  } catch {
+    // 저장하지 못해도 투어는 닫힌다.
+  }
+}
+
+function TourDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) {
+      setIndex(0);
+      dialog.showModal();
+    }
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  const current = TOUR_SLIDES[index];
+  const last = index === TOUR_SLIDES.length - 1;
+  return (
+    <dialog
+      ref={ref}
+      className="dialog tour"
+      aria-labelledby="tour-title"
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => e.target === ref.current && onClose()}
+    >
+      <div className="dialog-body">
+        <button className="dialog-close" aria-label="닫기" onClick={onClose}>
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+        <ol className="tour-stages" aria-label="학습 단계">
+          {STAGES.map((name, i) => (
+            <li key={name} className={current.stages.includes(i) ? "on" : undefined}>
+              <span className="tour-stage-no">{i + 1}</span>
+              {name}
+            </li>
+          ))}
+        </ol>
+        <div className="guide-text" aria-live="polite">
+          <span className="guide-count">
+            {index + 1} / {TOUR_SLIDES.length}
+          </span>
+          <h2 id="tour-title">{current.title}</h2>
+          <p>{current.body}</p>
+        </div>
+      </div>
+      <div className="dialog-actions">
+        <button onClick={() => setIndex(index - 1)} disabled={index === 0}>
+          이전
+        </button>
+        <button className="primary" autoFocus onClick={() => (last ? onClose() : setIndex(index + 1))}>
+          {last ? "시작하기" : "다음"}
         </button>
       </div>
     </dialog>
